@@ -1,50 +1,168 @@
 # "org" ensures this Service is used with the correct Serverless Framework Access Key.
-org: paulosk8
+org: mariora
 # "app" enables Serverless Framework Dashboard features and sharing them with other Services.
-app: spotly
-# "service" is the name of this project. This will also be added to your AWS resource names.
-service: Spotly
-
-stages:
-  default:
-    params:
-      tableName: "users-table-${sls:stage}"
+app: alquiler-canchas-api
+service: alquiler-canchas-api
 
 provider:
   name: aws
-  runtime: nodejs20.x
-  iam:
-    role:
-      statements:
-        - Effect: Allow
-          Action:
-            - dynamodb:Query
-            - dynamodb:Scan
-            - dynamodb:GetItem
-            - dynamodb:PutItem
-            - dynamodb:UpdateItem
-            - dynamodb:DeleteItem
-          Resource:
-            - Fn::GetAtt: [UsersTable, Arn]
+  runtime: nodejs18.x
+  region: us-east-1
   environment:
-    USERS_TABLE: ${param:tableName}
+    # Variables necesarias para tu aplicación (ejemplo)
+    STAGE: ${opt:stage, 'dev'}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource:
+        - !GetAtt CentrosDeportivosTable.Arn
+        - !GetAtt CanchasTable.Arn
+        - !GetAtt ReservasTable.Arn
+        - !GetAtt UsuariosTable.Arn
+        - !GetAtt ProductosTable.Arn
+        - !GetAtt VentasTable.Arn
 
 functions:
   api:
-    handler: handler.handler
+    handler: src/app.handler
     events:
-      - httpApi: "*"
+      - httpApi: '*'
 
 resources:
   Resources:
-    UsersTable:
+    # Tablas DynamoDB
+    CentrosDeportivosTable:
       Type: AWS::DynamoDB::Table
       Properties:
+        TableName: CentrosDeportivos-${opt:stage, 'dev'}
+        BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
-          - AttributeName: userId
+          - AttributeName: id
             AttributeType: S
         KeySchema:
-          - AttributeName: userId
+          - AttributeName: id
             KeyType: HASH
+
+    CanchasTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Canchas-${opt:stage, 'dev'}
         BillingMode: PAY_PER_REQUEST
-        TableName: ${param:tableName}
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: centroDeportivoId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: CentroDeportivoIndex
+            KeySchema:
+              - AttributeName: centroDeportivoId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    ReservasTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Reservas-${opt:stage, 'dev'}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: canchaId
+            AttributeType: S
+          - AttributeName: fecha
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: CanchaFechaIndex
+            KeySchema:
+              - AttributeName: canchaId
+                KeyType: HASH
+              - AttributeName: fecha
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+    UsuariosTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Usuarios-${opt:stage, 'dev'}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: EmailIndex
+            KeySchema:
+              - AttributeName: email
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    ProductosTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Productos-${opt:stage, 'dev'}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: centroDeportivoId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: CentroDeportivoIndex
+            KeySchema:
+              - AttributeName: centroDeportivoId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    VentasTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Ventas-${opt:stage, 'dev'}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: centroDeportivoId
+            AttributeType: S
+          - AttributeName: fecha
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: CentroDeportivoFechaIndex
+            KeySchema:
+              - AttributeName: centroDeportivoId
+                KeyType: HASH
+              - AttributeName: fecha
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+plugins:
+  - serverless-dotenv-plugin 
+  - serverless-offline
+  - serverless-dynamodb-local
