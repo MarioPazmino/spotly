@@ -1,3 +1,4 @@
+
 # "org" ensures this Service is used with the correct Serverless Framework Access Key.
 org: mariora
 # "app" enables Serverless Framework Dashboard features and sharing them with other Services.
@@ -8,31 +9,41 @@ provider:
   name: aws
   runtime: nodejs18.x
   region: us-east-1
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource:
+            - !GetAtt ReservasTable.Arn  # Permite operaciones en la tabla principal
+            - !Join ["", [!GetAtt ReservasTable.Arn, "/*"]]  # Incluye índices
   environment:
-    # Variables necesarias para tu aplicación (ejemplo)
     STAGE: ${opt:stage, 'dev'}
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - dynamodb:Query
-        - dynamodb:Scan
-        - dynamodb:GetItem
-        - dynamodb:PutItem
-        - dynamodb:UpdateItem
-        - dynamodb:DeleteItem
-      Resource:
-        - !GetAtt CentrosDeportivosTable.Arn
-        - !GetAtt CanchasTable.Arn
-        - !GetAtt ReservasTable.Arn
-        - !GetAtt UsuariosTable.Arn
-        - !GetAtt ProductosTable.Arn
-        - !GetAtt VentasTable.Arn
+    # Variables de entorno para tablas (mejora seguridad)
+    RESERVAS_TABLE: Reservas-${opt:stage, 'dev'}
+    CENTROS_DEPORTIVOS_TABLE: CentrosDeportivos-${opt:stage, 'dev'}
+    CANCHAS_TABLE: Canchas-${opt:stage, 'dev'}
+    USUARIOS_TABLE: Usuarios-${opt:stage, 'dev'}
+    PRODUCTOS_TABLE: Productos-${opt:stage, 'dev'}
+    VENTAS_TABLE: Ventas-${opt:stage, 'dev'}
 
 functions:
-  api:
-    handler: src/app.handler
+  createReservation:
+    handler: src/function/addReservation.addReservation
     events:
-      - httpApi: '*'
+      - httpApi:
+          path: /crearreserva
+          method: post
+
+  listarReservas:
+    handler: src/function/listReservation.listReservation
+    events:
+      - httpApi:
+          path: /reservas
+          method: get
 
 resources:
   Resources:
@@ -161,8 +172,3 @@ resources:
                 KeyType: RANGE
             Projection:
               ProjectionType: ALL
-
-plugins:
-  - serverless-dotenv-plugin 
-  - serverless-offline
-  - serverless-dynamodb-local
