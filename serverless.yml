@@ -1,6 +1,4 @@
-# "org" ensures this Service is used with the correct Serverless Framework Access Key.
-# org: mariora
-# "app" enables Serverless Framework Dashboard features and sharing them with other Services.
+org: mariora
 app: alquiler-canchas-api
 service: alquiler-canchas-api
 
@@ -17,11 +15,10 @@ provider:
             - dynamodb:Query
             - dynamodb:Scan
           Resource:
-            - !GetAtt ReservasTable.Arn  # Permite operaciones en la tabla principal
-            - !Join ["", [!GetAtt ReservasTable.Arn, "/*"]]  # Incluye índices
+            - !GetAtt ReservasTable.Arn
+            - !Join ["", [!GetAtt ReservasTable.Arn, "/*"]]
   environment:
     STAGE: ${opt:stage, 'dev'}
-    # Variables de entorno para tablas (mejora seguridad)
     RESERVAS_TABLE: Reservas-${opt:stage, 'dev'}
     CENTROS_DEPORTIVOS_TABLE: CentrosDeportivos-${opt:stage, 'dev'}
     CANCHAS_TABLE: Canchas-${opt:stage, 'dev'}
@@ -172,30 +169,63 @@ resources:
             Projection:
               ProjectionType: ALL
 
-# Agregar a serverless.yml en la sección resources
-CognitoUserPool:
-  Type: AWS::Cognito::UserPool
-  Properties:
-    UserPoolName: alquiler-canchas-users-${opt:stage, 'dev'}
-    AutoVerifiedAttributes:
-      - email
-    UsernameAttributes:
-      - email
-    Policies:
-      PasswordPolicy:
-        MinimumLength: 8
-        RequireLowercase: true
-        RequireNumbers: true
-        RequireSymbols: false
-        RequireUppercase: true
+    # Recursos nuevos integrados correctamente
+    CognitoUserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        UserPoolName: alquiler-canchas-users-${opt:stage, 'dev'}
+        AutoVerifiedAttributes:
+          - email
+        UsernameAttributes:
+          - email
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 8
+            RequireLowercase: true
+            RequireNumbers: true
+            RequireSymbols: false
+            RequireUppercase: true
 
-CognitoUserPoolClient:
-  Type: AWS::Cognito::UserPoolClient
-  Properties:
-    ClientName: alquiler-canchas-app-client
-    UserPoolId:
-      Ref: CognitoUserPool
-    ExplicitAuthFlows:
-      - ALLOW_USER_SRP_AUTH
-      - ALLOW_REFRESH_TOKEN_AUTH
-    GenerateSecret: false
+    CognitoUserPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: alquiler-canchas-app-client
+        UserPoolId:
+          Ref: CognitoUserPool
+        ExplicitAuthFlows:
+          - ALLOW_USER_SRP_AUTH
+          - ALLOW_REFRESH_TOKEN_AUTH
+        GenerateSecret: false
+
+    WebAppBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: alquiler-canchas-webapp-${opt:stage, 'dev'}
+        WebsiteConfiguration:
+          IndexDocument: index.html
+          ErrorDocument: error.html
+
+    CloudFrontDistribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Origins:
+            - DomainName: !Sub "${WebAppBucket}.s3.amazonaws.com"
+              Id: WebApp
+              S3OriginConfig: {}
+          Enabled: true
+          DefaultRootObject: index.html
+          DefaultCacheBehavior:
+            TargetOriginId: WebApp
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            CachedMethods:
+              - GET
+              - HEAD
+            ForwardedValues:
+              QueryString: false
+              Cookies:
+                Forward: none
