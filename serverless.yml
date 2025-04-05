@@ -1,4 +1,4 @@
-org: mariora
+# org: mariora
 app: alquiler-canchas-api
 service: alquiler-canchas-api
 
