@@ -2,16 +2,16 @@ const jwt = require('jsonwebtoken');
 const jwksClient = require('jwks-rsa');
 const Boom = require('@hapi/boom');
 
-// ⚙️ Configura aquí tu región y User Pool ID
+//Configura aquí tu región y User Pool ID
 const REGION = 'us-east-1'; // Cambia si usas otra región
 const USER_POOL_ID = 'us-east-1_eJIeqz2SZ'; // Reemplaza por tu User Pool ID real
 
-// 🔑 Cliente para obtener la clave pública de Cognito
+//Cliente para obtener la clave pública de Cognito
 const client = jwksClient({
   jwksUri: `https://cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}/.well-known/jwks.json`
 });
 
-// 🔑 Método para obtener la clave con base en el header del token
+//Método para obtener la clave con base en el header del token
 function getKey(header, callback) {
   client.getSigningKey(header.kid, function (err, key) {
     if (err) {
@@ -23,7 +23,7 @@ function getKey(header, callback) {
   });
 }
 
-// 🔐 Middleware de autenticación
+//Middleware de autenticación
 module.exports = function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
 
@@ -33,7 +33,7 @@ module.exports = function authMiddleware(req, res, next) {
 
   const token = authHeader.split(' ')[1];
 
-  // ⚠️ Decodifica primero para obtener el header y el payload
+  //Decodifica primero para obtener el header y el payload
   jwt.verify(token, getKey, { algorithms: ['RS256'] }, (err, decoded) => {
     if (err) {
       console.error('Error de autenticación:', err);

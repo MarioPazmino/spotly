@@ -6,11 +6,11 @@ const {
 } = require("@aws-sdk/lib-dynamodb");
 const { v4: uuidv4 } = require("uuid");
 
-// 🔄 1. Usar variables de entorno definidas en serverless.yml
+//1. Usar variables de entorno definidas en serverless.yml
 const RESERVAS_TABLE = process.env.RESERVAS_TABLE;
 const INDEX_NAME = "CanchaFechaIndex";
 
-// ✅ 2. Cliente de DynamoDB configurado correctamente
+//2. Cliente de DynamoDB configurado correctamente
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || "us-east-1" });
 const docClient = DynamoDBDocumentClient.from(client);
 
@@ -29,7 +29,7 @@ module.exports.addReservation = async (event) => {
       };
     }
 
-    // 🛡️ 4. Verificación de reserva existente (mejorable con esquema optimizado)
+    //4. Verificación de reserva existente (mejorable con esquema optimizado)
     const queryCommand = new QueryCommand({
       TableName: RESERVAS_TABLE,
       IndexName: INDEX_NAME,
@@ -56,7 +56,7 @@ module.exports.addReservation = async (event) => {
       };
     }
 
-    // 📝 5. Creación de reserva con timestamp
+    //5. Creación de reserva con timestamp
     const nuevaReserva = {
       id: uuidv4(),
       canchaId,
