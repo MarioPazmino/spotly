@@ -14,9 +14,16 @@ provider:
             - dynamodb:PutItem
             - dynamodb:Query
             - dynamodb:Scan
+            - dynamodb:DeleteItem
+            - dynamodb:UpdateItem
+            - dynamodb:GetItem
           Resource:
             - !GetAtt ReservasTable.Arn
             - !Join ["", [!GetAtt ReservasTable.Arn, "/*"]]
+            - !GetAtt CentrosDeportivosTable.Arn
+            - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/*"]]
+            - !GetAtt CanchasTable.Arn       
+            - !Join ["", [!GetAtt CanchasTable.Arn, "/*"]] 
   environment:
     STAGE: ${opt:stage, 'dev'}
     RESERVAS_TABLE: Reservas-${opt:stage, 'dev'}
@@ -40,6 +47,62 @@ functions:
       - httpApi:
           path: /reservas
           method: get
+  
+  createSportsCenter:
+    handler: src/function/Sports-Centers/addSportsCenters.addSportsCenters
+    events:
+      - httpApi:
+          path: /centros-deportivos
+          method: post
+ 
+  listSportsCenters:
+    handler: src/function/Sports-Centers/listSportsCenters.listSportsCenters
+    events:
+      - httpApi:
+          path: /centros-deportivos
+          method: get
+
+  deleteSportsCenter:
+    handler: src/function/Sports-Centers/deleteSportsCenters.deleteSportsCenter
+    events:
+      - httpApi:
+          path: /centros-deportivos/{id}
+          method: delete
+
+  updateSportsCenter:
+    handler: src/function/Sports-Centers/updateSportsCenters.updateSportsCenter
+    events:
+      - httpApi:
+          path: /centros-deportivos/{id}
+          method: put
+
+  createCancha:
+    handler: src/function/Canchas/addCanchas.addCanchas
+    events:
+      - httpApi:
+          path: /canchas
+          method: post
+  
+  listCanchas:
+    handler: src/function/Canchas/listCanchas.listCanchas
+    events:
+      - httpApi:
+          path: /canchas
+          method: get
+
+  deleteCanchas:
+    handler: src/function/Canchas/deleteCanchas.deleteCanchas
+    events:
+      - httpApi:
+          path: /canchas/{id}
+          method: delete
+  
+  updateCanchas:
+    handler: src/function/Canchas/updateCanchas.updateCanchas
+    events:
+      - httpApi:
+          path: /canchas/{id}
+          method: put
 
 resources:
   Resources:

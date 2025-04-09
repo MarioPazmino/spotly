@@ -1,10 +1,11 @@
+//app.js 
 const express = require('express');
 const serverless = require('serverless-http');
 const cors = require('cors');
 
-// ✅ Rutas corregidas (function con 'c')
-const { addReservation } = require('./src/function/addReservation');
-const { listReservation } = require('./src/function/listReservation');
+// Importar handlers
+const { addSportsCenters } = require('./src/function/Sports-Centers/addSportsCenters');
+const { listSportsCenters } = require('./src/function/Sports-Centers/listSportsCenters'); // Nuevo handler
 
 const app = express();
 
@@ -13,8 +14,8 @@ app.use(cors());
 app.use(express.json());
 
 // Rutas de la API
-app.post('/crearreserva', addReservation); // Directo como middleware
-app.get('/reservas', listReservation);     // Directo como middleware
+app.post('/centros-deportivos', addSportsCenters);
+app.get('/centros-deportivos', listSportsCenters); // Nueva ruta GET
 
 // Exporta el handler para Serverless Framework
 module.exports.handler = serverless(app);

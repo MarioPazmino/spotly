@@ -1,3 +1,4 @@
+//src/domain/entities/cancha.js
 class Cancha {
     constructor({
       id,
@@ -29,6 +30,5 @@ class Cancha {
       this.updatedAt = updatedAt || new Date().toISOString();
     }
   }
-  
-  export default Cancha;
+  module.exports = Cancha;
   
