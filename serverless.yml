@@ -35,86 +35,7 @@ provider:
     PRODUCTOS_TABLE: Productos-${opt:stage, 'dev'}
     VENTAS_TABLE: Ventas-${opt:stage, 'dev'}
 
-#======================================================================================#
-#====================================RESERVAS==========================================#
-#======================================================================================#
-functions:
-  createReservation:
-    handler: src/function/addReservation.addReservation
-    events:
-      - httpApi:
-          path: /crearreserva
-          method: post
 
-  listarReservas:
-    handler: src/function/listReservation.listReservation
-    events:
-      - httpApi:
-          path: /reservas
-          method: get
-  
-#======================================================================================#
-#==============================CENTRO DEPORTIVO========================================#
-#======================================================================================#
-  createSportsCenter:
-    handler: src/function/Sports-Centers/addSportsCenters.addSportsCenters
-    events:
-      - httpApi:
-          path: /centros-deportivos
-          method: post
- 
-  listSportsCenters:
-    handler: src/function/Sports-Centers/listSportsCenters.listSportsCenters
-    events:
-      - httpApi:
-          path: /centros-deportivos
-          method: get
-
-  updateSportsCenter:
-    handler: src/function/Sports-Centers/updateSportsCenters.updateSportsCenter
-    events:
-      - httpApi:
-          path: /centros-deportivos/{id}
-          method: put
-
-  deleteSportsCenter:
-    handler: src/function/Sports-Centers/deleteSportsCenters.deleteSportsCenter
-    events:
-      - httpApi:
-          path: /centros-deportivos/{id}
-          method: delete
-
-#======================================================================================#
-#=====================================CANCHAS==========================================#
-#======================================================================================#
-
-  createCancha:
-    handler: src/function/Canchas/addCanchas.addCanchas
-    events:
-      - httpApi:
-          path: /canchas
-          method: post
-  
-  listCanchas:
-    handler: src/function/Canchas/listCanchas.listCanchas
-    events:
-      - httpApi:
-          path: /canchas
-          method: get
-  
-  updateCanchas:
-    handler: src/function/Canchas/updateCanchas.updateCanchas
-    events:
-      - httpApi:
-          path: /canchas/{id}
-          method: put
-
-  deleteCanchas:
-    handler: src/function/Canchas/deleteCanchas.deleteCanchas
-    events:
-      - httpApi:
-          path: /canchas/{id}
-          method: delete
 
 #======================================================================================#
 #====================================USUARIOS==========================================#
@@ -148,6 +69,92 @@ functions:
           path: /usuarios/{userId}
           method: delete
 
+
+#======================================================================================#
+#==============================CENTRO DEPORTIVO========================================#
+#======================================================================================#
+  createSportsCenter:
+    handler: src/function/Sports-Centers/addSportsCenters.addSportsCenters
+    events:
+      - httpApi:
+          path: /centros-deportivos
+          method: post
+ 
+  listSportsCenters:
+    handler: src/function/Sports-Centers/listSportsCenters.listSportsCenters
+    events:
+      - httpApi:
+          path: /centros-deportivos
+          method: get
+
+  updateSportsCenter:
+    handler: src/function/Sports-Centers/updateSportsCenters.updateSportsCenter
+    events:
+      - httpApi:
+          path: /centros-deportivos/{id}
+          method: put
+
+  deleteSportsCenter:
+    handler: src/function/Sports-Centers/deleteSportsCenters.deleteSportsCenter
+    events:
+      - httpApi:
+          path: /centros-deportivos/{id}
+          method: delete
+
+
+
+#======================================================================================#
+#=====================================CANCHAS==========================================#
+#======================================================================================#
+
+  createCancha:
+    handler: src/function/Canchas/addCanchas.addCanchas
+    events:
+      - httpApi:
+          path: /canchas
+          method: post
+  
+  listCanchas:
+    handler: src/function/Canchas/listCanchas.listCanchas
+    events:
+      - httpApi:
+          path: /canchas
+          method: get
+  
+  updateCanchas:
+    handler: src/function/Canchas/updateCanchas.updateCanchas
+    events:
+      - httpApi:
+          path: /canchas/{id}
+          method: put
+
+  deleteCanchas:
+    handler: src/function/Canchas/deleteCanchas.deleteCanchas
+    events:
+      - httpApi:
+          path: /canchas/{id}
+          method: delete
+
+
+
+#======================================================================================#
+#====================================RESERVAS==========================================#
+#======================================================================================#
+functions:
+  createReservation:
+    handler: src/function/addReservation.addReservation
+    events:
+      - httpApi:
+          path: /crearreserva
+          method: post
+
+  listarReservas:
+    handler: src/function/listReservation.listReservation
+    events:
+      - httpApi:
+          path: /reservas
+          method: get
+  
 
 resources:
   Resources:
