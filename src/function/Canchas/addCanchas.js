@@ -1,14 +1,11 @@
-//src/function/Canchas/addCanchas.js
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
 const { randomUUID } = require("crypto");
-const Cancha = require("../../domain/entities/cancha");
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
 
 exports.addCanchas = async (event) => {
-  console.log('Evento recibido:', event);
   try {
     if (!event.body) {
       return {
@@ -24,8 +21,7 @@ exports.addCanchas = async (event) => {
     let data;
     try {
       data = JSON.parse(event.body);
-    } catch (parseError) {
-      console.error('Error al parsear el cuerpo JSON:', parseError);
+    } catch (error) {
       return {
         statusCode: 400,
         headers: {
@@ -36,102 +32,54 @@ exports.addCanchas = async (event) => {
       };
     }
 
-    console.log('Datos recibidos:', data);
-
-    // Validación de campos requeridos
-    const requiredFields = [
-      'centroDeportivoId',
-      'nombre',
-      'tipo',
-      'capacidad',
-      'precioPorHora',
-      'superficie'
-    ];
-
+    // Validar campos requeridos
+    const requiredFields = ['CentroId', 'Tipo', 'Capacidad', 'PrecioPorHora'];
     for (const field of requiredFields) {
-      if (!data[field]) {
+      if (data[field] === undefined || data[field] === null) {
         return {
           statusCode: 400,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-          },
-          body: JSON.stringify({ error: `Falta el campo obligatorio: ${field}` }),
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          body: JSON.stringify({ error: `Falta el campo obligatorio: ${field}` })
         };
       }
     }
 
-    // Validación de tipos numéricos
-    if (typeof data.capacidad !== 'number' || typeof data.precioPorHora !== 'number') {
+    if (typeof data.Capacidad !== 'number' || typeof data.PrecioPorHora !== 'number') {
       return {
         statusCode: 400,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*"
-        },
-        body: JSON.stringify({ error: 'Capacidad y precio por hora deben ser números' }),
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ error: 'Capacidad y PrecioPorHora deben ser números' })
       };
     }
 
-    // Crear entidad Cancha
-    const nuevaCancha = new Cancha({
-      id: data.id || randomUUID(),
-      centroDeportivoId: data.centroDeportivoId,
-      nombre: data.nombre,
-      tipo: data.tipo,
-      capacidad: data.capacidad,
-      precioPorHora: data.precioPorHora,
-      descripcion: data.descripcion || '',
-      imagenes: data.imagenes || [],
-      tamano: data.tamano,
-      superficie: data.superficie,
-      disponible: data.disponible !== false // Por defecto true si no se especifica
-    });
+    const nuevaCancha = {
+      CanchaId: randomUUID(),
+      CentroId: data.CentroId,
+      Tipo: data.Tipo,
+      Capacidad: data.Capacidad,
+      PrecioPorHora: data.PrecioPorHora,
+      CreatedAt: new Date().toISOString(),
+      UpdatedAt: new Date().toISOString(),
+    };
 
-    console.log('Cancha a guardar:', nuevaCancha);
-
-    // Verificar tabla de canchas
-    if (!process.env.CANCHAS_TABLE) {
-      console.error('Variable de entorno CANCHAS_TABLE no definida');
-      return {
-        statusCode: 500,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*"
-        },
-        body: JSON.stringify({
-          message: 'Error de configuración: tabla de canchas no definida',
-        }),
-      };
-    }
-
-    // Guardar en DynamoDB
-    await docClient.send(new PutCommand({
+    const params = {
       TableName: process.env.CANCHAS_TABLE,
-      Item: nuevaCancha
-    }));
+      Item: nuevaCancha,
+    };
+
+    await docClient.send(new PutCommand(params));
 
     return {
       statusCode: 201,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*"
-      },
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       body: JSON.stringify(nuevaCancha),
     };
-
   } catch (error) {
     console.error('Error al crear cancha:', error);
     return {
       statusCode: 500,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*"
-      },
-      body: JSON.stringify({
-        message: 'Error interno del servidor',
-        error: error.message
-      }),
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ message: 'Error interno del servidor', error: error.message }),
     };
   }
 };

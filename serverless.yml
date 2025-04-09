@@ -250,7 +250,7 @@ resources:
         AttributeDefinitions:
           - AttributeName: CanchaId
             AttributeType: S
-          - AttributeName: centroDeportivoId
+          - AttributeName: CentroId
             AttributeType: S
         KeySchema:
           - AttributeName: CanchaId
@@ -258,7 +258,7 @@ resources:
         GlobalSecondaryIndexes:
           - IndexName: CentroDeportivoIndex
             KeySchema:
-              - AttributeName: centroDeportivoId
+              - AttributeName: CentroId
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
@@ -271,7 +271,7 @@ resources:
         AttributeDefinitions:
           - AttributeName: ReservaId
             AttributeType: S
-          - AttributeName: canchaId
+          - AttributeName: CanchaId
             AttributeType: S
           - AttributeName: fecha
             AttributeType: S
@@ -281,7 +281,7 @@ resources:
         GlobalSecondaryIndexes:
           - IndexName: CanchaFechaIndex
             KeySchema:
-              - AttributeName: canchaId
+              - AttributeName: CanchaId
                 KeyType: HASH
               - AttributeName: fecha
                 KeyType: RANGE
@@ -317,7 +317,7 @@ resources:
         AttributeDefinitions:
           - AttributeName: horarioId
             AttributeType: S
-          - AttributeName: canchaId
+          - AttributeName: CanchaId
             AttributeType: S
           - AttributeName: fecha
             AttributeType: S
@@ -327,7 +327,7 @@ resources:
         GlobalSecondaryIndexes:
           - IndexName: CanchaFechaIndex
             KeySchema:
-              - AttributeName: canchaId
+              - AttributeName: CanchaId
                 KeyType: HASH
               - AttributeName: fecha
                 KeyType: RANGE
