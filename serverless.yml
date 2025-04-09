@@ -18,29 +18,28 @@ provider:
             - dynamodb:UpdateItem
             - dynamodb:GetItem
           Resource:
-            - !GetAtt ReservasTable.Arn
-            - !Join ["", [!GetAtt ReservasTable.Arn, "/*"]]
-            - !GetAtt CentrosDeportivosTable.Arn
-            - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/*"]]
-            - !GetAtt CanchasTable.Arn
-            - !Join ["", [!GetAtt CanchasTable.Arn, "/*"]]
-            - !GetAtt UsuariosTable.Arn  
-            - !Join ["", [!GetAtt UsuariosTable.Arn, "/index/EmailIndex"]]  
+          - !GetAtt CentrosDeportivosTable.Arn
+          - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/*"]]
+          - !GetAtt CanchasTable.Arn
+          - !Join ["", [!GetAtt CanchasTable.Arn, "/*"]]
+          - !GetAtt UsuariosTable.Arn  
+          - !Join ["", [!GetAtt UsuariosTable.Arn, "/index/EmailIndex"]] 
+          - !GetAtt HorariosTable.Arn
+          - !Join ["", [!GetAtt HorariosTable.Arn, "/*"]]
+          - !Join ["", [!GetAtt HorariosTable.Arn, "/index/CanchaFechaIndex"]]
   environment:
     STAGE: ${opt:stage, 'dev'}
     RESERVAS_TABLE: Reservas-${opt:stage, 'dev'}
     CENTROS_DEPORTIVOS_TABLE: CentrosDeportivos-${opt:stage, 'dev'}
     CANCHAS_TABLE: Canchas-${opt:stage, 'dev'}
     USUARIOS_TABLE: Usuarios-${opt:stage, 'dev'}
-    PRODUCTOS_TABLE: Productos-${opt:stage, 'dev'}
+    SCHEDULES_TABLE: Horarios-${opt:stage, 'dev'}
     VENTAS_TABLE: Ventas-${opt:stage, 'dev'}
 
-
-
-#======================================================================================#
-#====================================USUARIOS==========================================#
-#======================================================================================#
-
+functions:
+  #======================================================================================#
+  #====================================USUARIOS==========================================#
+  #======================================================================================#
   addUsers:
     handler: src/function/Users/addUsers.addUserLambda
     events:
@@ -69,10 +68,9 @@ provider:
           path: /usuarios/{userId}
           method: delete
 
-
-#======================================================================================#
-#==============================CENTRO DEPORTIVO========================================#
-#======================================================================================#
+  #======================================================================================#
+  #==============================CENTRO DEPORTIVO========================================#
+  #======================================================================================#
   createSportsCenter:
     handler: src/function/Sports-Centers/addSportsCenters.addSportsCenters
     events:
@@ -101,12 +99,9 @@ provider:
           path: /centros-deportivos/{id}
           method: delete
 
-
-
-#======================================================================================#
-#=====================================CANCHAS==========================================#
-#======================================================================================#
-
+  #======================================================================================#
+  #=====================================CANCHAS==========================================#
+  #======================================================================================#
   createCancha:
     handler: src/function/Canchas/addCanchas.addCanchas
     events:
@@ -135,12 +130,40 @@ provider:
           path: /canchas/{id}
           method: delete
 
+  #======================================================================================#
+  #=====================================HORARIOS=========================================#
+  #======================================================================================#
+  createSchedule:
+    handler: src/function/Schedules/addSchedules.addSchedule
+    events:
+      - httpApi:
+          path: /horarios
+          method: post
+          
+  listSchedules:
+    handler: src/function/Schedules/listSchedules.listSchedules
+    events:
+      - httpApi:
+          path: /horarios
+          method: get
+          
+  updateSchedule:
+    handler: src/function/Schedules/updateSchedules.updateSchedule
+    events:
+      - httpApi:
+          path: /horarios/{horarioId}
+          method: put
+          
+  deleteSchedule:
+    handler: src/function/Schedules/deleteSchedules.deleteSchedule
+    events:
+      - httpApi:
+          path: /horarios/{horarioId}
+          method: delete
 
-
-#======================================================================================#
-#====================================RESERVAS==========================================#
-#======================================================================================#
-functions:
+  #======================================================================================#
+  #====================================RESERVAS==========================================#
+  #======================================================================================#
   createReservation:
     handler: src/function/addReservation.addReservation
     events:
@@ -155,12 +178,11 @@ functions:
           path: /reservas
           method: get
   
-
 resources:
   Resources:
-#======================================================================================#
-#================================Tablas DynamoDB=======================================#
-#======================================================================================#
+    #======================================================================================#
+    #================================Tablas DynamoDB=======================================#
+    #======================================================================================#
     CentrosDeportivosTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -240,24 +262,28 @@ resources:
             Projection:
               ProjectionType: ALL
 
-    ProductosTable:
+    HorariosTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: Productos-${opt:stage, 'dev'}
+        TableName: Horarios-${opt:stage, 'dev'}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
-          - AttributeName: id
+          - AttributeName: horarioId
             AttributeType: S
-          - AttributeName: centroDeportivoId
+          - AttributeName: canchaId
+            AttributeType: S
+          - AttributeName: fecha
             AttributeType: S
         KeySchema:
-          - AttributeName: id
+          - AttributeName: horarioId
             KeyType: HASH
         GlobalSecondaryIndexes:
-          - IndexName: CentroDeportivoIndex
+          - IndexName: CanchaFechaIndex
             KeySchema:
-              - AttributeName: centroDeportivoId
+              - AttributeName: canchaId
                 KeyType: HASH
+              - AttributeName: fecha
+                KeyType: RANGE
             Projection:
               ProjectionType: ALL
 
@@ -286,10 +312,9 @@ resources:
             Projection:
               ProjectionType: ALL
 
-#======================================================================================#
-#====================================COGNITO==========================================#
-#======================================================================================#
-#========================Recursos nuevos integrados correctamente======================#
+    #======================================================================================#
+    #====================================COGNITO==========================================#
+    #======================================================================================#
     CognitoUserPool:
       Type: AWS::Cognito::UserPool
       Properties:
@@ -349,4 +374,3 @@ resources:
               QueryString: false
               Cookies:
                 Forward: none
-                
