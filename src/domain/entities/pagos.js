@@ -2,7 +2,7 @@
 class Pago {
   constructor({
     pagoId, // Renombrado de 'id' a 'pagoId'
-    reservaId, // FK a Reservas.ReservaId
+    ReservaId, // FK a Reservas.ReservaId
     userId, // FK a Usuarios.UserId
     monto,
     metodoPago, // 'tarjeta', 'transferencia', etc.
@@ -11,7 +11,7 @@ class Pago {
     updatedAt
   }) {
     this.pagoId = pagoId;
-    this.reservaId = reservaId;
+    this.ReservaId = ReservaId;
     this.userId = userId;
     this.monto = monto;
     this.metodoPago = metodoPago;

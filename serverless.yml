@@ -29,6 +29,12 @@ provider:
           - !Join ["", [!GetAtt HorariosTable.Arn, "/index/CanchaFechaIndex"]]
           - !GetAtt ReservasTable.Arn
           - !Join ["", [!GetAtt ReservasTable.Arn, "/*"]]
+          - !Join ["", [!GetAtt ReservasTable.Arn, "/index/CanchaFechaIndex"]]
+          - !GetAtt PagosTable.Arn
+          - !Join ["", [!GetAtt PagosTable.Arn, "/*"]]
+          - !Join ["", [!GetAtt PagosTable.Arn, "/index/ReservaIndex"]]
+          - !Join ["", [!GetAtt PagosTable.Arn, "/index/UserIndex"]]
+          
   environment:
     STAGE: ${opt:stage, 'dev'}
     RESERVAS_TABLE: Reservas-${opt:stage, 'dev'}
@@ -36,7 +42,7 @@ provider:
     CANCHAS_TABLE: Canchas-${opt:stage, 'dev'}
     USUARIOS_TABLE: Usuarios-${opt:stage, 'dev'}
     SCHEDULES_TABLE: Horarios-${opt:stage, 'dev'}
-    VENTAS_TABLE: Ventas-${opt:stage, 'dev'}
+    PAGOS_TABLE: Pagos-${opt:stage, 'dev'}  
 
 functions:
   #======================================================================================#
@@ -191,6 +197,34 @@ functions:
           path: /reservation/{ReservaId}
           method: delete
   
+  #======================================================================================#
+  #=======================================PAGOS==========================================#
+  #======================================================================================#
+  createPayment:
+    handler: src/function/Payments/addPayments.addPayment
+    events:
+      - httpApi:
+          path: /pagos
+          method: post
+  listPayments:
+    handler: src/function/Payments/listPayments.listPayments
+    events:
+      - httpApi:
+          path: /pagos
+          method: get
+  updatePayment:
+    handler: src/function/Payments/updatePayments.updatePayment
+    events:
+      - httpApi:
+          path: /pagos/{pagoId}
+          method: put
+  deletePayment:
+    handler: src/function/Payments/deletePayments.deletePayment
+    events:
+      - httpApi:
+          path: /pagos/{pagoId}
+          method: delete
+          
 resources:
   Resources:
     #======================================================================================#
@@ -300,28 +334,32 @@ resources:
             Projection:
               ProjectionType: ALL
 
-    VentasTable:
+    PagosTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: Ventas-${opt:stage, 'dev'}
+        TableName: Pagos-${opt:stage, 'dev'}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
-          - AttributeName: id
+          - AttributeName: pagoId
             AttributeType: S
-          - AttributeName: centroDeportivoId
+          - AttributeName: ReservaId
             AttributeType: S
-          - AttributeName: fecha
+          - AttributeName: userId
             AttributeType: S
         KeySchema:
-          - AttributeName: id
+          - AttributeName: pagoId
             KeyType: HASH
         GlobalSecondaryIndexes:
-          - IndexName: CentroDeportivoFechaIndex
+          - IndexName: ReservaIndex
             KeySchema:
-              - AttributeName: centroDeportivoId
+              - AttributeName: ReservaId
                 KeyType: HASH
-              - AttributeName: fecha
-                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: UserIndex
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
             Projection:
               ProjectionType: ALL
 
