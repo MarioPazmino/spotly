@@ -1,7 +1,7 @@
 //src/domain/entities/reserva.js
 class Reserva {
   constructor({
-    reservaId, // Renombrado de 'id' a 'reservaId'
+    ReservaId, // Renombrado de 'id' a 'reservaId'
     userId, // Renombrado de 'usuarioId' a 'userId'
     canchaId,
     horarioId, // Nuevo campo (FK a Horarios.HorarioId)
@@ -13,7 +13,7 @@ class Reserva {
     createdAt,
     updatedAt
   }) {
-    this.reservaId = reservaId;
+    this.ReservaId = ReservaId;
     this.userId = userId;
     this.canchaId = canchaId;
     this.horarioId = horarioId;
@@ -27,4 +27,3 @@ class Reserva {
   }
 }
 module.exports = Reserva;
-;

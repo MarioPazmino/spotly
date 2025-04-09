@@ -27,6 +27,8 @@ provider:
           - !GetAtt HorariosTable.Arn
           - !Join ["", [!GetAtt HorariosTable.Arn, "/*"]]
           - !Join ["", [!GetAtt HorariosTable.Arn, "/index/CanchaFechaIndex"]]
+          - !GetAtt ReservasTable.Arn
+          - !Join ["", [!GetAtt ReservasTable.Arn, "/*"]]
   environment:
     STAGE: ${opt:stage, 'dev'}
     RESERVAS_TABLE: Reservas-${opt:stage, 'dev'}
@@ -165,18 +167,29 @@ functions:
   #====================================RESERVAS==========================================#
   #======================================================================================#
   createReservation:
-    handler: src/function/addReservation.addReservation
+    handler: src/function/Reservation/createReservation.createReservation
     events:
       - httpApi:
-          path: /crearreserva
+          path: /reservation
           method: post
-
-  listarReservas:
-    handler: src/function/listReservation.listReservation
+  listReservas:
+    handler: src/function/Reservation/listReservation.listReservation
     events:
       - httpApi:
-          path: /reservas
+          path: /reservation
           method: get
+  updateReserva:
+    handler: src/function/Reservation/updateReservation.updateReservation
+    events:
+      - httpApi:
+          path: /reservation/{ReservaId}
+          method: put
+  deleteReserva:
+    handler: src/function/Reservation/deleteReservation.deleteReservation
+    events:
+      - httpApi:
+          path: /reservation/{ReservaId}
+          method: delete
   
 resources:
   Resources:

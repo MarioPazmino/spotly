@@ -1,43 +1,91 @@
-//src/function/listReservation.js
+//src/function/Reservation/listReservation.js
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
-const { DynamoDBDocumentClient, ScanCommand } = require("@aws-sdk/lib-dynamodb");
+const { DynamoDBDocumentClient, ScanCommand, GetCommand } = require("@aws-sdk/lib-dynamodb");
 
-const client = new DynamoDBClient({ region: process.env.AWS_REGION });
+const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
 
-module.exports.listReservation = async (event) => {
+exports.listReservation = async (event) => {
+  console.log('Listando reservas...');
   try {
-    // Escanear la tabla de reservas
-    const command = new ScanCommand({
+    if (!process.env.RESERVAS_TABLE) {
+      return {
+        statusCode: 500,
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ error: 'Tabla de reservas no configurada' }),
+      };
+    }
+
+    // Obtener parámetros de consulta
+    const queryParams = event.queryStringParameters || {};
+    const { ReservaId, userId, estado } = queryParams;
+
+    let params;
+
+    // Si se proporciona reservaId, buscar por ID específico
+    if (ReservaId) {
+      params = {
+        TableName: process.env.RESERVAS_TABLE,
+        Key: { ReservaId } // Asegúrate que "reservaId" coincida con el nombre de tu clave primaria en DynamoDB
+      };
+      
+      const data = await docClient.send(new GetCommand(params));
+      return data.Item
+        ? {
+            statusCode: 200,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+            body: JSON.stringify(data.Item),
+          }
+        : {
+            statusCode: 404,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+            body: JSON.stringify({ error: 'Reserva no encontrada' }),
+          };
+    }
+
+    // Si no hay reservaId, hacer un scan con filtros opcionales
+    params = {
       TableName: process.env.RESERVAS_TABLE,
-    });
+      FilterExpression: [],
+      ExpressionAttributeValues: {},
+    };
 
-    const { Items } = await docClient.send(command);
+    // Agregar filtros según parámetros recibidos
+    if (userId) {
+      params.FilterExpression.push('userId = :userId');
+      params.ExpressionAttributeValues[':userId'] = userId;
+    }
+    
+    if (estado) {
+      params.FilterExpression.push('estado = :estado');
+      params.ExpressionAttributeValues[':estado'] = estado;
+    }
 
-    // Respuesta en formato API Gateway
+    // Si hay filtros, construir la expresión
+    if (params.FilterExpression.length > 0) {
+      params.FilterExpression = params.FilterExpression.join(' AND ');
+    } else {
+      delete params.FilterExpression;
+      delete params.ExpressionAttributeValues;
+    }
+
+    const data = await docClient.send(new ScanCommand(params));
+
     return {
       statusCode: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",  // Habilita CORS
-      },
-      body: JSON.stringify({
-        total: Items.length,
-        reservas: Items.map(item => ({
-          id: item.id,
-          canchaId: item.canchaId,
-          fecha: item.fecha,
-          hora: item.hora,
-          usuarioId: item.usuarioId,
-          createdAt: item.createdAt,
-        })),
-      }),
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify(data.Items || []),
     };
+
   } catch (error) {
-    console.error("Error al listar reservas:", error);
+    console.error('Error listando reservas:', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Error interno del servidor" }),
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({
+        error: 'Error interno del servidor',
+        details: error.message
+      }),
     };
   }
 };
