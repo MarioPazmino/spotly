@@ -2,26 +2,19 @@
 
 class Usuario {
   constructor({
-    id,
+    userId, // Renombrado de 'id' a 'userId'
     email,
-    nombre,
-    apellido,
-    telefono,
-    tipo, // 'super_admin', 'admin_centro', 'cliente'
-    centroDeportivoId, // Solo para admin_centro
+    passwordHash, // Campo nuevo agregado
+    role, // Renombrado de 'tipo' a 'role'
     createdAt,
     updatedAt
   }) {
-    this.id = id;
+    this.userId = userId;
     this.email = email;
-    this.nombre = nombre;
-    this.apellido = apellido;
-    this.telefono = telefono;
-    this.tipo = tipo;
-    this.centroDeportivoId = centroDeportivoId;
+    this.passwordHash = passwordHash; // Asignación del hash de contraseña
+    this.role = role; // 'super_admin', 'admin_centro', 'cliente'
     this.createdAt = createdAt || new Date().toISOString();
     this.updatedAt = updatedAt || new Date().toISOString();
   }
 }
-
-export default Usuario;
+module.exports = Usuario;

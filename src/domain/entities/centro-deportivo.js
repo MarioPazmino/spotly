@@ -1,27 +1,19 @@
 //src/domain/entities/centro-deportivo.js
 class CentroDeportivo {
   constructor({
-    id,
+    centroId, // Renombrado de 'id' a 'centroId'
     nombre,
     direccion,
-    coordenadas, // { lat, lng }
     telefono,
-    horarioApertura,
-    horarioCierre,
-    diasOperacion, // ['lunes', 'martes', ...]
-    imagenes,
+    userId, // Nuevo campo (referencia a Usuarios.UserId)
     createdAt,
     updatedAt
   }) {
-    this.id = id;
+    this.centroId = centroId;
     this.nombre = nombre;
     this.direccion = direccion;
-    this.coordenadas = coordenadas;
     this.telefono = telefono;
-    this.horarioApertura = horarioApertura;
-    this.horarioCierre = horarioCierre;
-    this.diasOperacion = diasOperacion;
-    this.imagenes = imagenes || [];
+    this.userId = userId; // Asignación de la FK
     this.createdAt = createdAt || new Date().toISOString();
     this.updatedAt = updatedAt || new Date().toISOString();
   }
