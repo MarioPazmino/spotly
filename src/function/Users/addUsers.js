@@ -1,38 +1,41 @@
-// src/function/Users/addUsers.js
-import { v4 as uuidv4 } from 'uuid';
-import AWS from 'aws-sdk';
-import Usuario from '../../domain/entities/usuario';
+// src/functions/Users/addUser.js
+const AWS = require('aws-sdk');
+const Usuario = require('../../domain/entities/usuario');
 
 const dynamoDb = new AWS.DynamoDB.DocumentClient();
 const USUARIOS_TABLE = process.env.USUARIOS_TABLE;
 
-export const addUser = async (req, res) => {
+// Generador alternativo de ID único si no quieres usar 'uuid'
+const generarId = () => {
+  return 'user_' + Math.random().toString(36).substr(2, 9);
+};
+
+// Lambda handler real
+const addUserLambda = async (event) => {
   try {
-    // Obtener datos del cuerpo de la solicitud
-    const body = req.body;
-    
+    const body = JSON.parse(event.body);
+
     // Validar campos requeridos
-    if (!body.email || !body.nombre || !body.apellido || !body.tipo) {
-      return res.status(400).json({
-        message: 'Faltan campos requeridos: email, nombre, apellido, tipo son obligatorios',
-      });
+    if (!body.email || !body.passwordHash || !body.role) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          message: 'Faltan campos requeridos: email, passwordHash y role son obligatorios',
+        }),
+      };
     }
-    
-    // Validar tipo de usuario
-    const tiposValidos = ['super_admin', 'admin_centro', 'cliente'];
-    if (!tiposValidos.includes(body.tipo)) {
-      return res.status(400).json({
-        message: 'Tipo de usuario no válido. Debe ser: super_admin, admin_centro o cliente',
-      });
+
+    // Validar rol de usuario
+    const rolesValidos = ['super_admin', 'admin_centro', 'cliente'];
+    if (!rolesValidos.includes(body.role)) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          message: 'Rol no válido. Debe ser: super_admin, admin_centro o cliente',
+        }),
+      };
     }
-    
-    // Validar que centroDeportivoId esté presente para admin_centro
-    if (body.tipo === 'admin_centro' && !body.centroDeportivoId) {
-      return res.status(400).json({
-        message: 'El campo centroDeportivoId es obligatorio para usuarios de tipo admin_centro',
-      });
-    }
-    
+
     // Verificar si el email ya existe
     const emailCheckParams = {
       TableName: USUARIOS_TABLE,
@@ -42,84 +45,49 @@ export const addUser = async (req, res) => {
         ':email': body.email,
       },
     };
-    
+
     const emailExists = await dynamoDb.query(emailCheckParams).promise();
-    
     if (emailExists.Items && emailExists.Items.length > 0) {
-      return res.status(409).json({
-        message: 'Ya existe un usuario con este email',
-      });
+      return {
+        statusCode: 409,
+        body: JSON.stringify({
+          message: 'Ya existe un usuario con este email',
+        }),
+      };
     }
-    
-    // Crear un nuevo usuario con ID generado
+
+    // Crear objeto Usuario
     const usuario = new Usuario({
-      id: uuidv4(),
+      userId: generarId(),
       email: body.email,
-      nombre: body.nombre,
-      apellido: body.apellido,
-      telefono: body.telefono || null,
-      tipo: body.tipo,
-      centroDeportivoId: body.centroDeportivoId || null,
+      passwordHash: body.passwordHash,
+      role: body.role,
     });
-    
-    // Parámetros para guardar en DynamoDB
+
+    // Guardar en DynamoDB
     const params = {
       TableName: USUARIOS_TABLE,
       Item: usuario,
     };
-    
-    // Guardar el usuario en DynamoDB
-    await dynamoDb.put(params).promise();
-    
-    // Respuesta exitosa
-    return res.status(201).json(usuario);
-  } catch (error) {
-    console.error('Error al crear usuario:', error);
-    
-    // Respuesta de error
-    return res.status(500).json({
-      message: 'Error al crear el usuario',
-      error: error.message,
-    });
-  }
-};
 
-// Para mantener compatibilidad con Lambda directa si es necesario
-export const addUserLambda = async (event) => {
-  try {
-    const body = JSON.parse(event.body);
-    
-    // Simulamos el objeto request y response de Express
-    const req = { body };
-    const res = {
-      status: (code) => ({
-        json: (data) => ({
-          statusCode: code,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Credentials': true,
-          },
-          body: JSON.stringify(data),
-        }),
-      }),
+    await dynamoDb.put(params).promise();
+
+    return {
+      statusCode: 201,
+      body: JSON.stringify(usuario),
     };
-    
-    // Llamamos a la función de Express
-    return await addUser(req, res);
   } catch (error) {
     console.error('Error en Lambda:', error);
     return {
       statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Credentials': true,
-      },
       body: JSON.stringify({
-        message: 'Error interno del servidor',
+        message: 'Error interno al crear el usuario',
         error: error.message,
       }),
     };
   }
+};
+
+module.exports = {
+  addUserLambda,
 };

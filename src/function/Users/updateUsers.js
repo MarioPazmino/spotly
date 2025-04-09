@@ -1,29 +1,23 @@
-//src/function/Users/updateUsers.js
-
 const AWS = require('aws-sdk');
 const dynamoDB = new AWS.DynamoDB.DocumentClient();
-const { USERS_TABLE } = process.env;
-const Usuario = require('../../domain/entities/usuario'); // Importar el modelo
+const { USUARIOS_TABLE } = process.env;
+const Usuario = require('../../domain/entities/usuario'); // Modelo actualizado
 
-module.exports.updateUser = async (event) => {
+module.exports.updateUsers = async (event) => {
   try {
-    // Extraer el ID del usuario de los parámetros de la ruta
-    const userId = event.pathParameters?.id;
+    const userId = event.pathParameters?.userId;
 
-    // Validar que se haya proporcionado un ID
     if (!userId) {
       return {
         statusCode: 400,
         body: JSON.stringify({
-          message: 'El ID del usuario es requerido.',
+          message: 'El campo UserId es requerido en los parámetros de la ruta.',
         }),
       };
     }
 
-    // Parsear el cuerpo de la solicitud
     const requestBody = JSON.parse(event.body);
 
-    // Validar que se hayan proporcionado datos para actualizar
     if (Object.keys(requestBody).length === 0) {
       return {
         statusCode: 400,
@@ -33,58 +27,47 @@ module.exports.updateUser = async (event) => {
       };
     }
 
-    // Validar que los datos enviados sean consistentes con el modelo Usuario
-    const usuarioActualizado = new Usuario({
-      id: userId,
-      email: requestBody.email || undefined, // Permitir omitir campos opcionales
-      nombre: requestBody.nombre || undefined,
-      apellido: requestBody.apellido || undefined,
-      telefono: requestBody.telefono || undefined,
-      tipo: requestBody.tipo || undefined,
-      centroDeportivoId: requestBody.centroDeportivoId || undefined,
-      createdAt: requestBody.createdAt || undefined,
-      updatedAt: new Date().toISOString(), // Siempre actualizar este campo
-    });
+    // Campos válidos que se pueden actualizar
+    const camposPermitidos = ['email', 'passwordHash', 'role'];
 
-    // Preparar los atributos a actualizar
+    // Construir expresiones dinámicas
     const updateExpressionParts = [];
-    const expressionAttributeValues = {};
-    const expressionAttributeNames = {};
+    const expressionAttributeValues = { ':updatedAt': new Date().toISOString() };
+    const expressionAttributeNames = { '#updatedAt': 'updatedAt' };
 
-    for (const [key, value] of Object.entries(usuarioActualizado)) {
-      if (value !== undefined && key !== 'id') {
-        updateExpressionParts.push(`#${key} = :${key}`);
-        expressionAttributeNames[`#${key}`] = key;
-        expressionAttributeValues[`:${key}`] = value;
+    for (const key of camposPermitidos) {
+      if (requestBody[key] !== undefined) {
+        const valueKey = `:${key}`;
+        const nameKey = `#${key}`;
+        updateExpressionParts.push(`${nameKey} = ${valueKey}`);
+        expressionAttributeValues[valueKey] = requestBody[key];
+        expressionAttributeNames[nameKey] = key;
       }
     }
 
-    // Validar que haya algo que actualizar
     if (updateExpressionParts.length === 0) {
       return {
         statusCode: 400,
         body: JSON.stringify({
-          message: 'No hay datos válidos para actualizar.',
+          message: 'No hay campos válidos para actualizar.',
         }),
       };
     }
 
-    // Parámetros para DynamoDB
+    // Siempre actualiza updatedAt
+    updateExpressionParts.push('#updatedAt = :updatedAt');
+
     const params = {
-      TableName: USERS_TABLE,
-      Key: {
-        id: userId,
-      },
+      TableName: USUARIOS_TABLE,
+      Key: { userId },
       UpdateExpression: `SET ${updateExpressionParts.join(', ')}`,
       ExpressionAttributeNames: expressionAttributeNames,
       ExpressionAttributeValues: expressionAttributeValues,
-      ReturnValues: 'ALL_NEW', // Devuelve el usuario actualizado
+      ReturnValues: 'ALL_NEW',
     };
 
-    // Actualizar el usuario en DynamoDB
     const result = await dynamoDB.update(params).promise();
 
-    // Verificar si el usuario fue actualizado
     if (result.Attributes) {
       return {
         statusCode: 200,
@@ -104,7 +87,6 @@ module.exports.updateUser = async (event) => {
   } catch (error) {
     console.error('Error al actualizar el usuario:', error);
 
-    // Respuesta de error
     return {
       statusCode: 500,
       body: JSON.stringify({

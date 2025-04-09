@@ -1,5 +1,3 @@
-//src/function/Sports-Centers/updateSportsCenters.js
-
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, UpdateCommand } = require("@aws-sdk/lib-dynamodb");
 
@@ -8,8 +6,9 @@ const docClient = DynamoDBDocumentClient.from(client);
 
 exports.updateSportsCenter = async (event) => {
   try {
-    // Validar variables de entorno
-    if (!process.env.CENTROS_DEPORTIVOS_TABLE) {
+    const tableName = process.env.CENTROS_DEPORTIVOS_TABLE;
+
+    if (!tableName) {
       return {
         statusCode: 500,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
@@ -17,17 +16,15 @@ exports.updateSportsCenter = async (event) => {
       };
     }
 
-    // Obtener ID del path parameter
     const centroId = event.pathParameters?.id;
     if (!centroId) {
       return {
         statusCode: 400,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ error: "ID del centro no proporcionado" })
+        body: JSON.stringify({ error: "CentroId no proporcionado en la URL" })
       };
     }
 
-    // Parsear y validar el body
     let data;
     try {
       data = JSON.parse(event.body);
@@ -35,84 +32,46 @@ exports.updateSportsCenter = async (event) => {
       return {
         statusCode: 400,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ error: "Cuerpo de la solicitud no es un JSON válido" })
+        body: JSON.stringify({ error: "El cuerpo no es un JSON válido" })
       };
     }
 
-    // Validar campos requeridos
-    const requiredFields = [
-      'nombre',
-      'direccion',
-      'coordenadas',
-      'telefono',
-      'horarioApertura',
-      'horarioCierre',
-      'diasOperacion'
-    ];
+    const camposValidos = ['Nombre', 'Direccion', 'Telefono', 'UserId'];
+    const updateExpressionParts = [];
+    const expressionAttributeNames = {};
+    const expressionAttributeValues = { ':UpdatedAt': new Date().toISOString() };
 
-    for (const field of requiredFields) {
-      if (!data[field]) {
-        return {
-          statusCode: 400,
-          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-          body: JSON.stringify({ error: `Falta el campo obligatorio: ${field}` })
-        };
+    for (const campo of camposValidos) {
+      if (data[campo] !== undefined) {
+        updateExpressionParts.push(`#${campo} = :${campo}`);
+        expressionAttributeNames[`#${campo}`] = campo;
+        expressionAttributeValues[`:${campo}`] = data[campo];
       }
     }
 
-    // Validar coordenadas
-    if (
-      !data.coordenadas ||
-      typeof data.coordenadas.lat !== 'number' ||
-      typeof data.coordenadas.lng !== 'number'
-    ) {
+    if (updateExpressionParts.length === 0) {
       return {
         statusCode: 400,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ error: 'Las coordenadas deben ser números válidos' })
+        body: JSON.stringify({ error: "No se proporcionaron campos válidos para actualizar" })
       };
     }
 
-    // Construir el comando de actualización
+    updateExpressionParts.push('#UpdatedAt = :UpdatedAt');
+    expressionAttributeNames['#UpdatedAt'] = 'UpdatedAt';
+
     const command = new UpdateCommand({
-      TableName: process.env.CENTROS_DEPORTIVOS_TABLE,
-      Key: { id: centroId },
-      UpdateExpression: 
-        'SET #nombre = :nombre, ' +
-        '#direccion = :direccion, ' +
-        '#coordenadas = :coordenadas, ' +
-        '#telefono = :telefono, ' +
-        '#horarioApertura = :horarioApertura, ' +
-        '#horarioCierre = :horarioCierre, ' +
-        '#diasOperacion = :diasOperacion, ' +
-        '#imagenes = :imagenes',
-      ExpressionAttributeNames: {
-        '#nombre': 'nombre',
-        '#direccion': 'direccion',
-        '#coordenadas': 'coordenadas',
-        '#telefono': 'telefono',
-        '#horarioApertura': 'horarioApertura',
-        '#horarioCierre': 'horarioCierre',
-        '#diasOperacion': 'diasOperacion',
-        '#imagenes': 'imagenes'
-      },
-      ExpressionAttributeValues: {
-        ':nombre': data.nombre,
-        ':direccion': data.direccion,
-        ':coordenadas': data.coordenadas,
-        ':telefono': data.telefono,
-        ':horarioApertura': data.horarioApertura,
-        ':horarioCierre': data.horarioCierre,
-        ':diasOperacion': data.diasOperacion,
-        ':imagenes': data.imagenes || []
-      },
+      TableName: tableName,
+      Key: { CentroId: centroId },
+      UpdateExpression: `SET ${updateExpressionParts.join(', ')}`,
+      ExpressionAttributeNames: expressionAttributeNames,
+      ExpressionAttributeValues: expressionAttributeValues,
       ReturnValues: 'ALL_NEW'
     });
 
-    const response = await docClient.send(command);
+    const result = await docClient.send(command);
 
-    // Verificar si el ítem existía
-    if (!response.Attributes) {
+    if (!result.Attributes) {
       return {
         statusCode: 404,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
@@ -123,7 +82,10 @@ exports.updateSportsCenter = async (event) => {
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify(response.Attributes)
+      body: JSON.stringify({
+        message: "Centro deportivo actualizado correctamente",
+        data: result.Attributes
+      })
     };
 
   } catch (error) {
@@ -131,7 +93,7 @@ exports.updateSportsCenter = async (event) => {
     return {
       statusCode: 500,
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ error: "Error interno del servidor" })
+      body: JSON.stringify({ error: "Error interno del servidor", details: error.message })
     };
   }
 };

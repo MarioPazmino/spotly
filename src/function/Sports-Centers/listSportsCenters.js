@@ -1,5 +1,3 @@
-//src/function/Sports-Centers/listSportsCenters.js
-
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, ScanCommand, GetCommand } = require("@aws-sdk/lib-dynamodb");
 
@@ -8,7 +6,9 @@ const docClient = DynamoDBDocumentClient.from(client);
 
 exports.listSportsCenters = async (event) => {
   try {
-    if (!process.env.CENTROS_DEPORTIVOS_TABLE) {
+    const tableName = process.env.CENTROS_DEPORTIVOS_TABLE;
+
+    if (!tableName) {
       return {
         statusCode: 500,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
@@ -16,48 +16,48 @@ exports.listSportsCenters = async (event) => {
       };
     }
 
-    // Verificar si se proporciona un ID en los query parameters
     const centroId = event.queryStringParameters?.id;
 
-    let response;
+    let result;
     if (centroId) {
-      // Buscar por ID específico
+      // Obtener un centro por su ID
       const command = new GetCommand({
-        TableName: process.env.CENTROS_DEPORTIVOS_TABLE,
-        Key: { id: centroId }
+        TableName: tableName,
+        Key: { CentroId: centroId }
       });
-      response = await docClient.send(command);
-      
+      const response = await docClient.send(command);
+
       if (!response.Item) {
         return {
           statusCode: 404,
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-          body: JSON.stringify({ error: "Centro no encontrado" })
+          body: JSON.stringify({ error: "Centro deportivo no encontrado" })
         };
       }
+
+      result = response.Item;
     } else {
-      // Listar todos los centros
+      // Obtener todos los centros
       const command = new ScanCommand({
-        TableName: process.env.CENTROS_DEPORTIVOS_TABLE
+        TableName: tableName,
+        ProjectionExpression: 'CentroId, Nombre, Direccion, Telefono, UserId, CreatedAt, UpdatedAt'
       });
-      response = await docClient.send(command);
+      const response = await docClient.send(command);
+      result = response.Items || [];
     }
 
     return {
       statusCode: 200,
-      headers: { 
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*" 
-      },
-      body: JSON.stringify(centroId ? response.Item : response.Items || [])
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify(result)
     };
 
   } catch (error) {
-    console.error("Error:", error);
+    console.error("Error al listar centros deportivos:", error);
     return {
       statusCode: 500,
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ error: "Error interno del servidor" })
+      body: JSON.stringify({ error: "Error interno del servidor", details: error.message })
     };
   }
 };

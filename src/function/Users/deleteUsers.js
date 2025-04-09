@@ -1,39 +1,41 @@
-//src/funtion/Users/deleteUsers.js
-
 const AWS = require('aws-sdk');
 const dynamoDB = new AWS.DynamoDB.DocumentClient();
-const { USERS_TABLE } = process.env;
+const { USUARIOS_TABLE } = process.env;
 
-module.exports.deleteUser = async (event) => {
+module.exports.deleteUsers = async (event) => {
   try {
-    // Extraer el ID del usuario de los parámetros de la ruta
-    const userId = event.pathParameters?.id;
+    const userId = event.pathParameters?.userId;
 
-    // Validar que se haya proporcionado un ID
     if (!userId) {
       return {
         statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({
-          message: 'El ID del usuario es requerido.',
+          message: 'El campo UserId es requerido en los parámetros.',
         }),
       };
     }
 
-    // Parámetros para DynamoDB
     const params = {
-      TableName: USERS_TABLE,
+      TableName: USUARIOS_TABLE,
       Key: {
-        id: userId,
+        userId: userId,
       },
+      ReturnValues: 'ALL_OLD',
     };
 
-    // Eliminar el usuario de DynamoDB
     const result = await dynamoDB.delete(params).promise();
 
-    // Verificar si el usuario fue eliminado
     if (result.Attributes) {
       return {
         statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({
           message: 'Usuario eliminado exitosamente',
         }),
@@ -41,6 +43,10 @@ module.exports.deleteUser = async (event) => {
     } else {
       return {
         statusCode: 404,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         body: JSON.stringify({
           message: 'Usuario no encontrado',
         }),
@@ -49,9 +55,12 @@ module.exports.deleteUser = async (event) => {
   } catch (error) {
     console.error('Error al eliminar el usuario:', error);
 
-    // Respuesta de error
     return {
       statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
       body: JSON.stringify({
         message: 'Error interno del servidor',
         error: error.message,

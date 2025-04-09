@@ -22,8 +22,10 @@ provider:
             - !Join ["", [!GetAtt ReservasTable.Arn, "/*"]]
             - !GetAtt CentrosDeportivosTable.Arn
             - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/*"]]
-            - !GetAtt CanchasTable.Arn       
-            - !Join ["", [!GetAtt CanchasTable.Arn, "/*"]] 
+            - !GetAtt CanchasTable.Arn
+            - !Join ["", [!GetAtt CanchasTable.Arn, "/*"]]
+            - !GetAtt UsuariosTable.Arn  
+            - !Join ["", [!GetAtt UsuariosTable.Arn, "/index/EmailIndex"]]  
   environment:
     STAGE: ${opt:stage, 'dev'}
     RESERVAS_TABLE: Reservas-${opt:stage, 'dev'}
@@ -33,6 +35,9 @@ provider:
     PRODUCTOS_TABLE: Productos-${opt:stage, 'dev'}
     VENTAS_TABLE: Ventas-${opt:stage, 'dev'}
 
+#======================================================================================#
+#====================================RESERVAS==========================================#
+#======================================================================================#
 functions:
   createReservation:
     handler: src/function/addReservation.addReservation
@@ -48,6 +53,9 @@ functions:
           path: /reservas
           method: get
   
+#======================================================================================#
+#==============================CENTRO DEPORTIVO========================================#
+#======================================================================================#
   createSportsCenter:
     handler: src/function/Sports-Centers/addSportsCenters.addSportsCenters
     events:
@@ -62,6 +70,13 @@ functions:
           path: /centros-deportivos
           method: get
 
+  updateSportsCenter:
+    handler: src/function/Sports-Centers/updateSportsCenters.updateSportsCenter
+    events:
+      - httpApi:
+          path: /centros-deportivos/{id}
+          method: put
+
   deleteSportsCenter:
     handler: src/function/Sports-Centers/deleteSportsCenters.deleteSportsCenter
     events:
@@ -69,12 +84,9 @@ functions:
           path: /centros-deportivos/{id}
           method: delete
 
-  updateSportsCenter:
-    handler: src/function/Sports-Centers/updateSportsCenters.updateSportsCenter
-    events:
-      - httpApi:
-          path: /centros-deportivos/{id}
-          method: put
+#======================================================================================#
+#=====================================CANCHAS==========================================#
+#======================================================================================#
 
   createCancha:
     handler: src/function/Canchas/addCanchas.addCanchas
@@ -89,13 +101,6 @@ functions:
       - httpApi:
           path: /canchas
           method: get
-
-  deleteCanchas:
-    handler: src/function/Canchas/deleteCanchas.deleteCanchas
-    events:
-      - httpApi:
-          path: /canchas/{id}
-          method: delete
   
   updateCanchas:
     handler: src/function/Canchas/updateCanchas.updateCanchas
@@ -104,19 +109,61 @@ functions:
           path: /canchas/{id}
           method: put
 
+  deleteCanchas:
+    handler: src/function/Canchas/deleteCanchas.deleteCanchas
+    events:
+      - httpApi:
+          path: /canchas/{id}
+          method: delete
+
+#======================================================================================#
+#====================================USUARIOS==========================================#
+#======================================================================================#
+
+  addUsers:
+    handler: src/function/Users/addUsers.addUserLambda
+    events:
+      - httpApi:
+          path: /usuarios
+          method: post
+
+  listUsers:
+    handler: src/function/Users/listUsers.listUsers
+    events:
+      - httpApi:
+          path: /usuarios
+          method: get
+
+  updateUsers:
+    handler: src/function/Users/updateUsers.updateUsers
+    events:
+      - httpApi:
+          path: /usuarios/{userId}
+          method: put
+
+  deleteUsers:
+    handler: src/function/Users/deleteUsers.deleteUsers
+    events:
+      - httpApi:
+          path: /usuarios/{userId}
+          method: delete
+
+
 resources:
   Resources:
-    # Tablas DynamoDB
+#======================================================================================#
+#================================Tablas DynamoDB=======================================#
+#======================================================================================#
     CentrosDeportivosTable:
       Type: AWS::DynamoDB::Table
       Properties:
         TableName: CentrosDeportivos-${opt:stage, 'dev'}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
-          - AttributeName: id
+          - AttributeName: CentroId
             AttributeType: S
         KeySchema:
-          - AttributeName: id
+          - AttributeName: CentroId
             KeyType: HASH
 
     CanchasTable:
@@ -125,12 +172,12 @@ resources:
         TableName: Canchas-${opt:stage, 'dev'}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
-          - AttributeName: id
+          - AttributeName: CanchaId
             AttributeType: S
           - AttributeName: centroDeportivoId
             AttributeType: S
         KeySchema:
-          - AttributeName: id
+          - AttributeName: CanchaId
             KeyType: HASH
         GlobalSecondaryIndexes:
           - IndexName: CentroDeportivoIndex
@@ -146,14 +193,14 @@ resources:
         TableName: Reservas-${opt:stage, 'dev'}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
-          - AttributeName: id
+          - AttributeName: ReservaId
             AttributeType: S
           - AttributeName: canchaId
             AttributeType: S
           - AttributeName: fecha
             AttributeType: S
         KeySchema:
-          - AttributeName: id
+          - AttributeName: ReservaId
             KeyType: HASH
         GlobalSecondaryIndexes:
           - IndexName: CanchaFechaIndex
@@ -171,12 +218,12 @@ resources:
         TableName: Usuarios-${opt:stage, 'dev'}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
-          - AttributeName: id
+          - AttributeName: userId     
             AttributeType: S
           - AttributeName: email
             AttributeType: S
         KeySchema:
-          - AttributeName: id
+          - AttributeName: userId     
             KeyType: HASH
         GlobalSecondaryIndexes:
           - IndexName: EmailIndex
@@ -232,7 +279,10 @@ resources:
             Projection:
               ProjectionType: ALL
 
-    # Recursos nuevos integrados correctamente
+#======================================================================================#
+#====================================COGNITO==========================================#
+#======================================================================================#
+#========================Recursos nuevos integrados correctamente======================#
     CognitoUserPool:
       Type: AWS::Cognito::UserPool
       Properties:

@@ -1,5 +1,3 @@
-//src/function/Sports-Centers/deleteSportsCenters.js
-
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, DeleteCommand } = require("@aws-sdk/lib-dynamodb");
 
@@ -8,8 +6,9 @@ const docClient = DynamoDBDocumentClient.from(client);
 
 exports.deleteSportsCenter = async (event) => {
   try {
-    // Validar variables de entorno
-    if (!process.env.CENTROS_DEPORTIVOS_TABLE) {
+    const tableName = process.env.CENTROS_DEPORTIVOS_TABLE;
+
+    if (!tableName) {
       return {
         statusCode: 500,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
@@ -17,43 +16,40 @@ exports.deleteSportsCenter = async (event) => {
       };
     }
 
-    // Obtener ID del path parameter
     const centroId = event.pathParameters?.id;
     if (!centroId) {
       return {
         statusCode: 400,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ error: "ID del centro no proporcionado" })
+        body: JSON.stringify({ error: "CentroId no proporcionado en la ruta" })
       };
     }
 
-    // Eliminar registro en DynamoDB
     const command = new DeleteCommand({
-        TableName: process.env.CENTROS_DEPORTIVOS_TABLE,
-        Key: { id: centroId },
-        ReturnValues: 'ALL_OLD' // ← Clave agregada
-      });
-      
+      TableName: tableName,
+      Key: { CentroId: centroId },
+      ReturnValues: 'ALL_OLD'
+    });
+
     const response = await docClient.send(command);
 
-    // Verificar si se eliminó correctamente
     if (response.Attributes) {
-        return {
-          statusCode: 200, // ← Cambiado de 204 a 200
-          headers: { 
-            "Content-Type": "application/json", 
-            "Access-Control-Allow-Origin": "*" 
-          },
-          body: JSON.stringify({ 
-            message: "Centro eliminado con éxito",
-            deletedItem: response.Attributes // Opcional: Devuelve los datos eliminados
-          })
-        };
-      } else {
+      return {
+        statusCode: 200,
+        headers: { 
+          "Content-Type": "application/json", 
+          "Access-Control-Allow-Origin": "*" 
+        },
+        body: JSON.stringify({ 
+          message: "Centro deportivo eliminado con éxito",
+          deletedItem: response.Attributes
+        })
+      };
+    } else {
       return {
         statusCode: 404,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ error: "Centro no encontrado" })
+        body: JSON.stringify({ error: "Centro deportivo no encontrado" })
       };
     }
 
@@ -62,7 +58,7 @@ exports.deleteSportsCenter = async (event) => {
     return {
       statusCode: 500,
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ error: "Error interno del servidor" })
+      body: JSON.stringify({ error: "Error interno del servidor", details: error.message })
     };
   }
 };
