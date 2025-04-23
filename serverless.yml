@@ -42,191 +42,74 @@ provider:
     CANCHAS_TABLE: Canchas-${opt:stage, 'dev'}
     USUARIOS_TABLE: Usuarios-${opt:stage, 'dev'}
     SCHEDULES_TABLE: Horarios-${opt:stage, 'dev'}
-    PAGOS_TABLE: Pagos-${opt:stage, 'dev'}  
-
+    PAGOS_TABLE: Pagos-${opt:stage, 'dev'} 
+    COGNITO_USER_POOL_ID: !Ref CognitoUserPool
+    COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
+    TOKEN_EXPIRATION: 3600 # En segundos (1 hora) 
+    
 functions:
-  #======================================================================================#
-  #====================================USUARIOS==========================================#
-  #======================================================================================#
-  addUsers:
-    handler: src/function/Users/addUsers.addUserLambda
+  # Una única función para toda la API
+  api:
+    handler: handler.api
     events:
       - httpApi:
-          path: /usuarios
-          method: post
+          path: /{proxy+}
+          method: ANY
 
-  listUsers:
-    handler: src/function/Users/listUsers.listUsers
-    events:
-      - httpApi:
-          path: /usuarios
-          method: get
-
-  updateUsers:
-    handler: src/function/Users/updateUsers.updateUsers
-    events:
-      - httpApi:
-          path: /usuarios/{userId}
-          method: put
-
-  deleteUsers:
-    handler: src/function/Users/deleteUsers.deleteUsers
-    events:
-      - httpApi:
-          path: /usuarios/{userId}
-          method: delete
-
-  #======================================================================================#
-  #==============================CENTRO DEPORTIVO========================================#
-  #======================================================================================#
-  createSportsCenter:
-    handler: src/function/Sports-Centers/addSportsCenters.addSportsCenters
-    events:
-      - httpApi:
-          path: /centros-deportivos
-          method: post
- 
-  listSportsCenters:
-    handler: src/function/Sports-Centers/listSportsCenters.listSportsCenters
-    events:
-      - httpApi:
-          path: /centros-deportivos
-          method: get
-
-  updateSportsCenter:
-    handler: src/function/Sports-Centers/updateSportsCenters.updateSportsCenter
-    events:
-      - httpApi:
-          path: /centros-deportivos/{id}
-          method: put
-
-  deleteSportsCenter:
-    handler: src/function/Sports-Centers/deleteSportsCenters.deleteSportsCenter
-    events:
-      - httpApi:
-          path: /centros-deportivos/{id}
-          method: delete
-
-  #======================================================================================#
-  #=====================================CANCHAS==========================================#
-  #======================================================================================#
-  createCancha:
-    handler: src/function/Canchas/addCanchas.addCanchas
-    events:
-      - httpApi:
-          path: /canchas
-          method: post
-  
-  listCanchas:
-    handler: src/function/Canchas/listCanchas.listCanchas
-    events:
-      - httpApi:
-          path: /canchas
-          method: get
-  
-  updateCanchas:
-    handler: src/function/Canchas/updateCanchas.updateCanchas
-    events:
-      - httpApi:
-          path: /canchas/{id}
-          method: put
-
-  deleteCanchas:
-    handler: src/function/Canchas/deleteCanchas.deleteCanchas
-    events:
-      - httpApi:
-          path: /canchas/{id}
-          method: delete
-
-  #======================================================================================#
-  #=====================================HORARIOS=========================================#
-  #======================================================================================#
-  createSchedule:
-    handler: src/function/Schedules/addSchedules.addSchedule
-    events:
-      - httpApi:
-          path: /horarios
-          method: post
-          
-  listSchedules:
-    handler: src/function/Schedules/listSchedules.listSchedules
-    events:
-      - httpApi:
-          path: /horarios
-          method: get
-          
-  updateSchedule:
-    handler: src/function/Schedules/updateSchedules.updateSchedule
-    events:
-      - httpApi:
-          path: /horarios/{horarioId}
-          method: put
-          
-  deleteSchedule:
-    handler: src/function/Schedules/deleteSchedules.deleteSchedule
-    events:
-      - httpApi:
-          path: /horarios/{horarioId}
-          method: delete
-
-  #======================================================================================#
-  #====================================RESERVAS==========================================#
-  #======================================================================================#
-  createReservation:
-    handler: src/function/Reservation/createReservation.createReservation
-    events:
-      - httpApi:
-          path: /reservation
-          method: post
-  listReservas:
-    handler: src/function/Reservation/listReservation.listReservation
-    events:
-      - httpApi:
-          path: /reservation
-          method: get
-  updateReserva:
-    handler: src/function/Reservation/updateReservation.updateReservation
-    events:
-      - httpApi:
-          path: /reservation/{ReservaId}
-          method: put
-  deleteReserva:
-    handler: src/function/Reservation/deleteReservation.deleteReservation
-    events:
-      - httpApi:
-          path: /reservation/{ReservaId}
-          method: delete
-  
-  #======================================================================================#
-  #=======================================PAGOS==========================================#
-  #======================================================================================#
-  createPayment:
-    handler: src/function/Payments/addPayments.addPayment
-    events:
-      - httpApi:
-          path: /pagos
-          method: post
-  listPayments:
-    handler: src/function/Payments/listPayments.listPayments
-    events:
-      - httpApi:
-          path: /pagos
-          method: get
-  updatePayment:
-    handler: src/function/Payments/updatePayments.updatePayment
-    events:
-      - httpApi:
-          path: /pagos/{pagoId}
-          method: put
-  deletePayment:
-    handler: src/function/Payments/deletePayments.deletePayment
-    events:
-      - httpApi:
-          path: /pagos/{pagoId}
-          method: delete
-          
 resources:
   Resources:
+    # Definición del HTTP API Gateway
+    HttpApi:
+      Type: AWS::ApiGatewayV2::Api
+      Properties:
+        Name: alquiler-canchas-api-${opt:stage, 'dev'}
+        ProtocolType: HTTP
+        CorsConfiguration:
+          AllowHeaders:
+            - Content-Type
+            - Authorization
+            - X-Amz-Date
+            - X-Api-Key
+            - X-Amz-Security-Token
+          AllowMethods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+          AllowOrigins:
+            - '*'
+
+    # Dominio personalizado para API Gateway usando certificado existente
+    ApiGatewayDomainName:
+      Type: AWS::ApiGatewayV2::DomainName
+      Properties:
+        DomainName: api.tucanchasdeportivas.com
+        DomainNameConfigurations:
+          - EndpointType: REGIONAL
+            CertificateArn: arn:aws:acm:us-east-1:237029655206:certificate/7c263b6e-d31c-48bd-bb3a-73933b7d5d6f
+
+    # Mapeo de API Gateway al dominio personalizado
+    ApiGatewayMapping:
+      Type: AWS::ApiGatewayV2::ApiMapping
+      DependsOn:
+        - ApiGatewayDomainName
+      Properties:
+        DomainName: api.tucanchasdeportivas.com
+        ApiId: !Ref HttpApi
+        Stage: $default
+
+    # Registro DNS para el dominio API
+    ApiDomainRecord:
+      Type: AWS::Route53::RecordSet
+      Properties:
+        HostedZoneId: Z027980929X1P0VZNXKFN # ID de tu zona existente
+        Name: api.tucanchasdeportivas.com
+        Type: A
+        AliasTarget:
+          HostedZoneId: !GetAtt ApiGatewayDomainName.RegionalHostedZoneId
+          DNSName: !GetAtt ApiGatewayDomainName.RegionalDomainName
+    
     #======================================================================================#
     #================================Tablas DynamoDB=======================================#
     #======================================================================================#

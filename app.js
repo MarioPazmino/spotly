@@ -1,21 +1,50 @@
-//app.js 
+// app.js
 const express = require('express');
 const serverless = require('serverless-http');
 const cors = require('cors');
+const errorHandler = require('./src/interfaces/middlewares/errorHandler');
+const { tokenHeaderApplier } = require('./src/interfaces/middlewares/tokenRefresher');
+const UserRepository = require('./src/infrastructure/repositories/userRepository');
 
-// Importar handlers
-const { addSportsCenters } = require('./src/function/Sports-Centers/addSportsCenters');
-const { listSportsCenters } = require('./src/function/Sports-Centers/listSportsCenters'); // Nuevo handler
+// Importar las rutas principales (que ya incluyen las versiones)
+const routes = require('./src/interfaces/http/routes');
 
 const app = express();
 
 // Middleware
-app.use(cors());
+app.set('userRepository', new UserRepository());
+
+// Middleware
+app.use(cors({
+  exposedHeaders: ['X-Access-Token'] // Importante para el refresh de tokens
+}));
 app.use(express.json());
 
-// Rutas de la API
-app.post('/centros-deportivos', addSportsCenters);
-app.get('/centros-deportivos', listSportsCenters); // Nueva ruta GET
+// Configuración de rutas versionadas
+app.use('/api', routes);
+
+// Ruta de salud para verificar que la API esté funcionando
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'UP', message: 'API está funcionando correctamente' });
+});
+
+// Aplicar middleware para tokens
+app.use(tokenHeaderApplier.apply());
+
+// Manejo de rutas no encontradas
+app.use((req, res) => {
+  res.status(404).json({ 
+    statusCode: 404,
+    error: 'Not Found', 
+    message: 'Ruta no encontrada' 
+  });
+});
+
+// Middleware para manejo de errores (DEBE estar después de las rutas)
+app.use(errorHandler);
 
 // Exporta el handler para Serverless Framework
 module.exports.handler = serverless(app);
+
+// También exportamos la app de Express para pruebas o uso directo
+module.exports.app = app;
