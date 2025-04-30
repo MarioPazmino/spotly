@@ -1,23 +1,39 @@
 //src/domain/entities/centro-deportivo.js
 class CentroDeportivo {
   constructor({
-    centroId, // Renombrado de 'id' a 'centroId'
-    nombre,
-    direccion,
-    telefono,
-    userId, // Nuevo campo (referencia a Usuarios.UserId)
-    createdAt,
-    updatedAt
+    centroId, // Identificador único del centro deportivo
+    nombre, // Nombre comercial del centro
+    direccion, // Dirección física completa
+    telefonoPrincipal, // Número de contacto principal
+    telefonoSecundario, // Número de contacto secundario (opcional)
+    userId, // ID del usuario administrador (FK)
+    horarioApertura, // Hora de inicio (formato HH:MM)
+    horarioCierre, // Hora de cierre (formato HH:MM)
+    ubicacionGPS, // Coordenadas para mapas {lat, lng}
+    imagenes, // Array de URLs de imágenes
+    servicios, // Lista de servicios adicionales
+    estado, // Estado operativo: 'abierto', 'cerrado', etc.
+    redesSociales, // Objeto con enlaces a redes sociales (opcional)
+    createdAt, // Fecha de creación del registro
+    updatedAt // Fecha de última actualización
   }) {
     this.centroId = centroId;
     this.nombre = nombre;
     this.direccion = direccion;
-    this.telefono = telefono;
-    this.userId = userId; // Asignación de la FK
+    this.telefonoPrincipal = telefonoPrincipal;
+    this.telefonoSecundario = telefonoSecundario || null; // Opcional, null por defecto
+    this.userId = userId;
+    this.horarioApertura = horarioApertura || '08:00'; // Horario predeterminado
+    this.horarioCierre = horarioCierre || '22:00'; // Horario predeterminado
+    this.ubicacionGPS = ubicacionGPS || { lat: 0, lng: 0 }; // Coordenadas por defecto
+    this.imagenes = imagenes || []; // Array vacío por defecto
+    this.servicios = servicios || []; // Array vacío por defecto
+    this.estado = estado || 'abierto'; // Por defecto está abierto
+    // Estructura para redes sociales: {facebook: url, instagram: url, twitter: url, etc}
+    this.redesSociales = redesSociales || {}; // Objeto vacío por defecto
     this.createdAt = createdAt || new Date().toISOString();
     this.updatedAt = updatedAt || new Date().toISOString();
   }
 }
 
-// Exportación CommonJS
 module.exports = CentroDeportivo;

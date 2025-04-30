@@ -1,14 +1,14 @@
 //src/domain/entities/pagos.js
 class Pago {
   constructor({
-    pagoId, // Renombrado de 'id' a 'pagoId'
-    ReservaId, // FK a Reservas.ReservaId
-    userId, // FK a Usuarios.UserId
-    monto,
-    metodoPago, // 'tarjeta', 'transferencia', etc.
-    estado, // 'Pendiente', 'Completado'
-    createdAt,
-    updatedAt
+    pagoId, // Identificador único del pago
+    ReservaId, // ID de la reserva asociada (FK)
+    userId, // ID del usuario que paga (FK)
+    monto, // Cantidad monetaria del pago
+    metodoPago, // Método: 'tarjeta', 'transferencia', 'efectivo', etc.
+    estado, // Estado: 'Pendiente', 'Completado', 'Rechazado', etc.
+    createdAt, // Fecha de creación del registro
+    updatedAt // Fecha de última actualización
   }) {
     this.pagoId = pagoId;
     this.ReservaId = ReservaId;

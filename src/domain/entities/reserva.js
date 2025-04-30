@@ -1,19 +1,22 @@
 //src/domain/entities/reserva.js
 class Reserva {
   constructor({
-    ReservaId, // Renombrado de 'id' a 'reservaId'
-    userId, // Renombrado de 'usuarioId' a 'userId'
-    canchaId,
-    horarioId, // Nuevo campo (FK a Horarios.HorarioId)
-    fecha,
-    horaInicio,
-    horaFin,
-    estado, // Valores: "Pendiente", "Pagado", "Cancelado"
-    total, // Renombrado de 'montoTotal' a 'total'
-    createdAt,
-    updatedAt
+    reservaId, // Identificador único de la reserva
+    userId, // ID del usuario que reserva (FK)
+    canchaId, // ID de la cancha reservada (FK)
+    horarioId, // ID del horario asociado (FK)
+    fecha, // Fecha de la reserva (formato YYYY-MM-DD)
+    horaInicio, // Hora de inicio (formato HH:MM:SS)
+    horaFin, // Hora de fin (formato HH:MM:SS)
+    estado, // Estado: "Pendiente", "Pagado", "Cancelado"
+    total, // Monto total a pagar
+    notas, // Instrucciones especiales o comentarios
+    codigoPromoAplicado, // Código de promoción/descuento
+    cancelacionMotivo, // Razón de cancelación, si aplica
+    createdAt, // Fecha de creación del registro
+    updatedAt // Fecha de última actualización
   }) {
-    this.ReservaId = ReservaId;
+    this.reservaId = reservaId;
     this.userId = userId;
     this.canchaId = canchaId;
     this.horarioId = horarioId;
@@ -22,8 +25,12 @@ class Reserva {
     this.horaFin = horaFin;
     this.estado = estado;
     this.total = total;
+    this.notas = notas || ''; // Cadena vacía por defecto
+    this.codigoPromoAplicado = codigoPromoAplicado || null; // Nulo si no hay promoción
+    this.cancelacionMotivo = cancelacionMotivo || null; // Nulo si no fue cancelada
     this.createdAt = createdAt || new Date().toISOString();
     this.updatedAt = updatedAt || new Date().toISOString();
   }
 }
+
 module.exports = Reserva;

@@ -1,12 +1,6 @@
 // src/interfaces/http/routes/v1/index.js
 const express = require('express');
 const router = express.Router();
-
-/**
- * Este archivo reúne todas las rutas de la versión 1 de la API
- */
-
-// Importar las rutas específicas de cada recurso
 const userRoutes = require('./userRoutes');
 
 // Registrar las rutas de cada recurso

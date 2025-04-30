@@ -1,27 +1,26 @@
 // src/interfaces/middlewares/errorHandler.js
-
-
-function errorHandler(err, req, res, next) {
-    console.error(err);
-    
-    // Si es un error de Boom, usar su formato
-    if (err.isBoom) {
-      const { statusCode, payload } = err.output;
-      return res.status(statusCode).json({
+function errorHandler(error) {
+  console.error('Error en la solicitud:', error);
+  if (error.isBoom) {
+    const { statusCode, payload } = error.output;
+    return {
+      statusCode,
+      body: JSON.stringify({
         ...payload,
-        ...(err.data && { data: err.data })
-      });
-    }
-    
-    // Para errores regulares
-    const statusCode = err.statusCode || 500;
-    return res.status(statusCode).json({
-      error: statusCode === 500 ? 'Internal Server Error' : err.name || 'Error',
-      message: process.env.NODE_ENV === 'production' && statusCode === 500 
-        ? 'Se produjo un error en el servidor' 
-        : err.message || 'Error inesperado',
-      statusCode
-    });
+        ...(error.data && { data: error.data })
+      })
+    };
   }
-  
-  module.exports = errorHandler;
+  const statusCode = error.statusCode || 500;
+  return {
+    statusCode,
+    body: JSON.stringify({
+      error: statusCode === 500 ? 'Internal Server Error' : error.name,
+      message: process.env.NODE_ENV === 'production' && statusCode === 500
+        ? 'Se produjo un error en el servidor'
+        : error.message || 'Error inesperado',
+      statusCode
+    })
+  };
+}
+module.exports = errorHandler;

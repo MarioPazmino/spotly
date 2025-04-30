@@ -11,11 +11,9 @@ const getUserForOwnershipCheck = async (req) => {
   const userRepository = req.app.get('userRepository');
   return await userRepository.findById(req.params.userId);
 };
-
 // Rutas públicas
 router.post('/', UserController.createUser);
 
-// Rutas que requieren autenticación
 router.get('/',
   cognitoAuth.authenticate(),
   tokenRefresher.checkAndRefresh(),
@@ -47,5 +45,4 @@ router.delete('/:userId',
   authorization.checkPermission('delete:usuarios'),
   UserController.deleteUser
 );
-
 module.exports = router;
