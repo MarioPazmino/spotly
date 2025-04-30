@@ -3,121 +3,86 @@ const Joi = require('joi');
 const Boom = require('@hapi/boom');
 const UserService = require('../../../../infrastructure/services/userService');
 
-const schemas = {
-  createUser: Joi.object({
-    email: Joi.string().email().required().description('Email del usuario'),
-    name: Joi.string().required().description('Nombre del usuario'),
-    cognitoId: Joi.string().description('ID de Cognito (opcional si se registra manualmente)'),
-    role: Joi.string().valid('super_admin', 'admin_centro', 'cliente').default('cliente')
-      .description('Rol del usuario'),
-    picture: Joi.string().uri().description('URL de la foto de perfil'),
-    registrationSource: Joi.string().default('cognito').description('Fuente de registro')
-  }),
-  updateUser: Joi.object({
-    email: Joi.string().email().description('Email del usuario'),
-    name: Joi.string().description('Nombre del usuario'),
-    picture: Joi.string().uri().description('URL de la foto de perfil')
-  }).min(1)
+// Validaciones
+const registerSchema = Joi.object({
+  email: Joi.string().email().required(),
+  name: Joi.string().required(),
+  picture: Joi.string().uri().optional()
+});
+
+const updateSchema = Joi.object({
+  name: Joi.string().optional(),
+  picture: Joi.string().uri().optional()
+}).min(1);
+
+exports.createUser = async (req, res, next) => {
+  try {
+    const { error, value } = registerSchema.validate(req.body);
+    if (error) throw Boom.badRequest(error.message);
+
+    const clientId = req.headers['x-client-id'] || process.env.COGNITO_MOBILE_CLIENT_ID;
+
+    const user = await UserService.registerUser(value, clientId);
+    return res.status(201).json(user);
+  } catch (error) {
+    next(error);
+  }
 };
 
-class UserController {
-  static async createUser(req, res, next) {
-    try {
-      const { error, value: userData } = schemas.createUser.validate(req.body);
-      if (error) {
-        throw Boom.badRequest(error.message);
-      }
-      const userRepository = req.app.get('userRepository');
-      const userService = new UserService(userRepository);
-      const usuario = await userService.createUser(userData);
-      return res.status(201).json(usuario);
-    } catch (error) {
-      console.error('Error al crear usuario:', error);
-      return next(Boom.isBoom(error) ? error : Boom.internal('Error interno al crear el usuario', error));
-    }
+exports.getUserById = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const user = await UserService.getUserById(userId);
+    return res.status(200).json(user);
+  } catch (error) {
+    next(error);
   }
-  static async getAllUsers(req, res, next) {
-    try {
-      const options = {
-        limit: parseInt(req.query.limit) || 20,
-        lastEvaluatedKey: req.query.nextToken || null,
-        filters: {}
-      };
-      if (req.query.role) {
-        options.filters.role = req.query.role;
-      }
-      const userRepository = req.app.get('userRepository');
-      const userService = new UserService(userRepository);
-      const result = await userService.getAllUsers(options);
-      return res.status(200).json({
-        message: result.items.length > 0 ? 'Usuarios obtenidos exitosamente' : 'No hay usuarios registrados',
-        data: result.items,
-        pagination: {
-          nextToken: result.lastEvaluatedKey,
-          count: result.count
-        }
-      });
-    } catch (error) {
-      console.error('Error al listar los usuarios:', error);
-      return next(Boom.internal('Error al listar usuarios', error));
-    }
+};
+
+exports.updateUserProfile = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+
+    const { error, value } = updateSchema.validate(req.body);
+    if (error) throw Boom.badRequest(error.message);
+
+    const requesterId = req.user.sub; // Suponiendo que el middleware de autenticación inyecta esto
+    const updated = await UserService.updateUserProfile(userId, value, requesterId);
+    return res.status(200).json(updated);
+  } catch (error) {
+    next(error);
   }
-  static async updateUser(req, res, next) {
-    try {
-      const userId = req.params.userId;
-      if (!userId) {
-        throw Boom.badRequest('El campo UserId es requerido en los parámetros de la ruta');
-      }
-      const { error, value: updateData } = schemas.updateUser.validate(req.body);
-      if (error) {
-        throw Boom.badRequest(error.message);
-      } 
-      const userRepository = req.app.get('userRepository');
-      const userService = new UserService(userRepository);
-      const updatedUser = await userService.updateUser(userId, updateData);
-      return res.status(200).json({
-        message: 'Usuario actualizado exitosamente',
-        data: updatedUser,
-      });
-    } catch (error) {
-      console.error('Error al actualizar el usuario:', error);
-      return next(Boom.isBoom(error) ? error : Boom.internal('Error al actualizar el usuario', error));
-    }
+};
+
+exports.deleteUser = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const requesterId = req.user.sub;
+    await UserService.deleteUser(userId, requesterId);
+    return res.status(200).json({ message: 'Usuario eliminado' });
+  } catch (error) {
+    next(error);
   }
-  static async deleteUser(req, res, next) {
-    try {
-      const userId = req.params.userId;
-      if (!userId) {
-        throw Boom.badRequest('El campo UserId es requerido en los parámetros');
-      }
-      const userRepository = req.app.get('userRepository');
-      const userService = new UserService(userRepository);
-      await userService.deleteUser(userId);
-      return res.status(200).json({
-        message: 'Usuario eliminado exitosamente',
-      });
-    } catch (error) {
-      console.error('Error al eliminar el usuario:', error);
-      return next(Boom.isBoom(error) ? error : Boom.internal('Error al eliminar el usuario', error));
-    }
+};
+
+exports.listPendingAdmins = async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+    const lastEvaluatedKey = req.query.nextToken || null;
+    const result = await UserService.getPendingAdmins(limit, lastEvaluatedKey);
+    return res.status(200).json(result);
+  } catch (error) {
+    next(error);
   }
-  static async getUserById(req, res, next) {
-    try {
-      const userId = req.params.userId;
-      if (!userId) {
-        throw Boom.badRequest('El campo UserId es requerido en los parámetros');
-      }
-      const userRepository = req.app.get('userRepository');
-      const userService = new UserService(userRepository);
-      const user = await userService.getUserById(userId);
-      return res.status(200).json({
-        message: 'Usuario encontrado exitosamente',
-        data: user,
-      });
-    } catch (error) {
-      console.error('Error al obtener el usuario:', error);
-      return next(Boom.isBoom(error) ? error : Boom.internal('Error al obtener el usuario', error));
-    }
+};
+
+exports.approveAdminCenter = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const requesterId = req.user.sub;
+    const result = await UserService.approveAdminCenter(userId, requesterId);
+    return res.status(200).json(result);
+  } catch (error) {
+    next(error);
   }
-}
-module.exports = UserController;
+};

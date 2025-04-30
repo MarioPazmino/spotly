@@ -14,3 +14,5 @@ router.use('/usuarios', userRoutes);
 // router.use('/pagos', require('./pagosRoutes'));
 
 module.exports = router;
+
+

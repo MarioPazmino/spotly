@@ -1,48 +1,24 @@
 // src/interfaces/http/routes/v1/userRoutes.js
 const express = require('express');
 const router = express.Router();
-const UserController = require('../../controllers/v1/UserController');
-const cognitoAuth = require('../../../middlewares/cognitoAuth');
-const authorization = require('../../../middlewares/authorization');
-const { tokenRefresher, tokenHeaderApplier } = require('../../../middlewares/tokenRefresher');
 
-// Función para obtener usuario para verificación de propiedad
-const getUserForOwnershipCheck = async (req) => {
-  const userRepository = req.app.get('userRepository');
-  return await userRepository.findById(req.params.userId);
-};
+const UserController = require('../../controllers/v1/UserController');
+const authenticate = require('../../../middlewares/CognitoAuthMiddleware');
+const { checkPermission } = require('../../../middlewares/authorization');
+
+// Middleware de autenticación
+const auth = authenticate.authenticate();
+
 // Rutas públicas
 router.post('/', UserController.createUser);
 
-router.get('/',
-  cognitoAuth.authenticate(),
-  tokenRefresher.checkAndRefresh(),
-  tokenHeaderApplier.apply(),
-  authorization.checkPermission('read:usuarios'),
-  UserController.getAllUsers
-);
+// Rutas protegidas
+router.get('/:userId', auth, UserController.getUserById);
+router.put('/:userId', auth, UserController.updateUserProfile);
+router.delete('/:userId', auth, checkPermission('delete:user'), UserController.deleteUser);
 
-router.get('/:userId',
-  cognitoAuth.authenticate(),
-  tokenRefresher.checkAndRefresh(),
-  tokenHeaderApplier.apply(),
-  authorization.checkOwnership(getUserForOwnershipCheck),
-  UserController.getUserById
-);
+// Rutas administrativas (solo super_admin)
+router.get('/pendientes', auth, checkPermission('approve:admin_centro'), UserController.listPendingAdmins);
+router.post('/aprobar/:userId', auth, checkPermission('approve:admin_centro'), UserController.approveAdminCenter);
 
-router.put('/:userId',
-  cognitoAuth.authenticate(),
-  tokenRefresher.checkAndRefresh(),
-  tokenHeaderApplier.apply(),
-  authorization.checkOwnership(getUserForOwnershipCheck),
-  UserController.updateUser
-);
-
-router.delete('/:userId',
-  cognitoAuth.authenticate(),
-  tokenRefresher.checkAndRefresh(),
-  tokenHeaderApplier.apply(),
-  authorization.checkPermission('delete:usuarios'),
-  UserController.deleteUser
-);
 module.exports = router;

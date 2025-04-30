@@ -1,38 +1,76 @@
 // src/admin/listarAdminsPendientes.js
 const AWS = require('aws-sdk');
 const dynamoDB = new AWS.DynamoDB.DocumentClient();
+
 exports.handler = async (event) => {
   try {
-    // Verificar si el usuario autenticado es super_admin
-    const groups = event.requestContext.authorizer.claims['cognito:groups'];
-    if (!groups || !groups.includes('super_admin')) {
+    // Verificar que el usuario que hace la solicitud sea un Super Admin
+    const requestContext = event.requestContext;
+    const claims = requestContext.authorizer?.jwt?.claims;
+    
+    if (!claims || !claims['cognito:groups']) {
       return {
         statusCode: 403,
-        body: JSON.stringify({ message: 'No tienes permisos para realizar esta acción' })
+        body: JSON.stringify({ 
+          message: 'No tiene permisos para realizar esta acción'
+        })
       };
     }
-    const USUARIOS_TABLE = process.env.USUARIOS_TABLE;
-    // Consultar usuarios pendientes de aprobación
+    
+    // Convertir el string de grupos a un array si es necesario
+    const groups = typeof claims['cognito:groups'] === 'string' 
+      ? [claims['cognito:groups']] 
+      : claims['cognito:groups'];
+    
+    const isSuperAdmin = groups.includes(process.env.SUPER_ADMIN_GROUP_NAME);
+    
+    if (!isSuperAdmin) {
+      return {
+        statusCode: 403,
+        body: JSON.stringify({ 
+          message: 'Esta acción solo puede ser realizada por un Super Admin'
+        })
+      };
+    }
+    
+    // Buscar usuarios pendientes de aprobación usando el índice secundario
     const result = await dynamoDB.query({
-      TableName: USUARIOS_TABLE,
+      TableName: process.env.USUARIOS_TABLE,
       IndexName: 'PendienteAprobacionIndex',
-      KeyConditionExpression: 'pendienteAprobacion = :pendiente',
+      KeyConditionExpression: 'pendienteAprobacion = :pendienteVal',
+      FilterExpression: 'role = :roleVal',
       ExpressionAttributeValues: {
-        ':pendiente': 'true'
+        ':pendienteVal': 'true',
+        ':roleVal': 'admin_centro'
       }
     }).promise();
+    
+    // Mapear resultados con campos alineados a la entidad Usuario
+    const adminsPendientes = result.Items.map(user => ({
+      userId: user.userId,
+      email: user.email,
+      name: user.name,
+      createdAt: user.createdAt, // Campo correcto
+      registrationSource: user.registrationSource,
+      picture: user.picture
+    }));
+    
     return {
       statusCode: 200,
       body: JSON.stringify({
-        admins: result.Items,
-        count: result.Count
+        count: adminsPendientes.length,
+        admins: adminsPendientes
       })
     };
   } catch (error) {
-    console.error('Error al listar administradores pendientes:', error);
+    console.error('Error listando administradores pendientes:', error);
+    
     return {
       statusCode: 500,
-      body: JSON.stringify({ message: 'Error al procesar la solicitud', error: error.message })
+      body: JSON.stringify({
+        message: 'Error al procesar la solicitud',
+        error: error.message
+      })
     };
   }
 };

@@ -3,7 +3,6 @@ const express = require('express');
 const serverless = require('serverless-http');
 const cors = require('cors');
 const errorHandler = require('./src/interfaces/middlewares/errorHandler');
-const { tokenHeaderApplier } = require('./src/interfaces/middlewares/tokenRefresher');
 const UserRepository = require('./src/infrastructure/repositories/userRepository');
 
 // Importar las rutas principales (que ya incluyen las versiones)
@@ -27,9 +26,6 @@ app.use('/api', routes);
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'UP', message: 'API está funcionando correctamente' });
 });
-
-// Aplicar middleware para tokens
-app.use(tokenHeaderApplier.apply());
 
 // Manejo de rutas no encontradas
 app.use((req, res) => {

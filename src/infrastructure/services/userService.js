@@ -1,92 +1,193 @@
 //src/infrastructure/services/userService.js
+const AWS = require('aws-sdk');
 const Boom = require('@hapi/boom');
-const Usuario = require('../../domain/entities/usuario');
-const crypto = require('crypto');
+const { v4: uuidv4 } = require('uuid');
+const UserRepository = require('../repositories/userRepository');
+const logger = require('../../utils/logger');
+
 class UserService {
-  constructor(userRepository) {
-    this.userRepository = userRepository;
-  }
-  static generateId() {
-    return 'user_' + crypto.randomBytes(4).toString('hex');
-  }
-  async createUser(userData) {
-    const existingUser = await this.userRepository.findByEmail(userData.email);
-    if (existingUser) {
-      throw Boom.conflict('Ya existe un usuario con este email');
-    }
-    const usuario = new Usuario({
-      userId: userData.userId || UserService.generateId(),
-      email: userData.email,
-      cognitoId: userData.cognitoId,
-      role: userData.role || 'cliente',
-      name: userData.name,
-      picture: userData.picture,
-      registrationSource: userData.registrationSource || 'cognito'
-    });
-    return await this.userRepository.save(usuario);
+  constructor() {
+    this.userRepository = new UserRepository();
+    this.cognito = new AWS.CognitoIdentityServiceProvider();
+    this.COGNITO_USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
+    this.ADMIN_CENTRO_GROUP_NAME = process.env.ADMIN_CENTRO_GROUP_NAME;
+    this.SUPER_ADMIN_GROUP_NAME = process.env.SUPER_ADMIN_GROUP_NAME;
+    this.CLIENTE_GROUP_NAME = process.env.CLIENTE_GROUP_NAME;
   }
 
-  async getUsersByRole(role, options = {}) {
-    return await this.userRepository.findByRole(role, options);
-  }
-  async getUserById(userId) {
-    const user = await this.userRepository.findById(userId);
-    if (!user) {
-      throw Boom.notFound('Usuario no encontrado');
+  async registerUser(userData, clientId) {
+    try {
+      // Validar datos de entrada
+      this.validateRegistrationData(userData, clientId);
+      
+      // Crear usuario en base de datos
+      const userId = uuidv4();
+      const newUser = {
+        userId,
+        ...userData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      await this.userRepository.save(newUser);
+      
+      return newUser;
+    } catch (error) {
+      logger.error(`Error registering user: ${error.message}`, { error });
+      throw Boom.boomify(error);
     }
-    return user;
-  }
-  async getUserByEmail(email) {
-    const user = await this.userRepository.findByEmail(email);
-    if (!user) {
-      throw Boom.notFound('Usuario no encontrado');
-    }
-    return user;
   }
 
-  async getUserByCognitoId(cognitoId) {
-    const user = await this.userRepository.findByCognitoId(cognitoId);
-    if (!user) {
-      throw Boom.notFound('Usuario no encontrado');
-    }
-    return user;
-  }
-  async updateUser(userId, updateData) {
-    const existingUser = await this.userRepository.findById(userId);
-    if (!existingUser) {
-      throw Boom.notFound('Usuario no encontrado');
-    }
-    if (updateData.email && updateData.email !== existingUser.email) {
-      const userWithEmail = await this.userRepository.findByEmail(updateData.email);
-      if (userWithEmail && userWithEmail.userId !== userId) {
-        throw Boom.conflict('Ya existe un usuario con este email');
+  async approveAdminCenter(userId, adminId) {
+    try {
+      // Verificar permisos del administrador
+      await this.verifyAdminPermissions(adminId, 'super_admin');
+      
+      // Obtener usuario pendiente
+      const user = await this.userRepository.findById(userId);
+      if (!user || user.pendienteAprobacion !== 'true') {
+        throw Boom.notFound('Usuario pendiente no encontrado');
       }
+      
+      // Actualizar estado en DynamoDB
+      await this.userRepository.updateApprovalStatus(
+        userId,
+        'false',
+        {
+          fechaAprobacion: new Date().toISOString()
+        }
+      );
+      
+      // Actualizar atributos en Cognito
+      await this.cognito.adminUpdateUserAttributes({
+        UserPoolId: this.COGNITO_USER_POOL_ID,
+        Username: userId,
+        UserAttributes: [
+          {
+            Name: 'custom:pendiente_aprobacion',
+            Value: 'false'
+          }
+        ]
+      }).promise();
+      
+      // Añadir al grupo de admin_centro
+      await this.cognito.adminAddUserToGroup({
+        UserPoolId: this.COGNITO_USER_POOL_ID,
+        Username: userId,
+        GroupName: this.ADMIN_CENTRO_GROUP_NAME
+      }).promise();
+      
+      logger.info(`Admin aprobado correctamente: ${userId}`);
+      return { message: 'Administrador aprobado correctamente', userId };
+    } catch (error) {
+      logger.error(`Error aprobando admin: ${error.message}`, { error });
+      throw Boom.boomify(error);
     }
-    const protectedFields = ['userId', 'cognitoId', 'createdAt', 'registrationSource'];
-    const filteredUpdateData = Object.fromEntries(
-      Object.entries(updateData).filter(([key]) => !protectedFields.includes(key))
-    );
-    return await this.userRepository.update(userId, filteredUpdateData);
   }
-  async updateLastLogin(userId) {
-    const existingUser = await this.userRepository.findById(userId);
-    if (!existingUser) {
-      throw Boom.notFound('Usuario no encontrado');
+
+  async getPendingAdmins(limit = 20, lastEvaluatedKey = null) {
+    try {
+      return await this.userRepository.findPendingAdmins(limit, lastEvaluatedKey);
+    } catch (error) {
+      logger.error(`Error obteniendo admins pendientes: ${error.message}`, { error });
+      throw Boom.boomify(error);
+    }
+  }
+
+  async getUserById(userId) {
+    try {
+      const user = await this.userRepository.findById(userId);
+      if (!user) {
+        throw Boom.notFound('Usuario no encontrado');
+      }
+      return user;
+    } catch (error) {
+      logger.error(`Error obteniendo usuario: ${error.message}`, { error });
+      throw Boom.boomify(error);
+    }
+  }
+
+  async updateUserProfile(userId, updateData, requesterId) {
+    try {
+      // Verificar que el solicitante pueda modificar este usuario
+      if (userId !== requesterId) {
+        await this.verifyAdminPermissions(requesterId, 'super_admin');
+      }
+      
+      // Validar actualización
+      this.validateUpdateData(updateData, userId, requesterId);
+      
+      // Realizar actualización
+      return await this.userRepository.update(userId, {
+        ...updateData,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error(`Error actualizando usuario: ${error.message}`, { error });
+      throw Boom.boomify(error);
+    }
+  }
+
+  async deleteUser(userId, requesterId) {
+    try {
+      // Solo super admins pueden eliminar usuarios
+      await this.verifyAdminPermissions(requesterId, 'super_admin');
+      
+      // Eliminar usuario
+      return await this.userRepository.delete(userId);
+    } catch (error) {
+      logger.error(`Error eliminando usuario: ${error.message}`, { error });
+      throw Boom.boomify(error);
+    }
+  }
+
+  // Métodos auxiliares
+  validateRegistrationData(userData, clientId) {
+    // Validaciones básicas
+    if (!userData.email || !userData.name) {
+      throw Boom.badRequest('Email y nombre son requeridos');
     }
     
-    return await this.userRepository.updateLastLogin(userId);
-  }
-  async deleteUser(userId) {
-    const user = await this.userRepository.delete(userId);
-    if (!user) {
-      throw Boom.notFound('Usuario no encontrado');
+    // Validar según tipo de registro
+    const isWebRegistration = clientId === process.env.COGNITO_WEB_CLIENT_ID;
+    
+    if (isWebRegistration && userData.role !== 'admin_centro') {
+      throw Boom.badRequest('Los registros desde web deben ser admin_centro');
     }
-    return user;
-  }
-  async getAllUsers(options = {}) {
-    return await this.userRepository.findAll(options);
+    
+    if (!isWebRegistration && userData.role !== 'cliente') {
+      throw Boom.badRequest('Los registros desde móvil deben ser cliente');
+    }
   }
 
+  validateUpdateData(updateData, userId, requesterId) {
+    // No permitir modificar ciertos campos sensibles sin permisos
+    const sensitiveFields = ['role', 'pendienteAprobacion'];
+    const attemptedSensitiveFields = Object.keys(updateData).filter(field => 
+      sensitiveFields.includes(field)
+    );
+    
+    if (attemptedSensitiveFields.length > 0 && userId !== requesterId) {
+      throw Boom.forbidden('No tienes permisos para modificar campos sensibles');
+    }
+  }
+
+  async verifyAdminPermissions(userId, requiredRole) {
+    const user = await this.userRepository.findById(userId);
+    
+    if (!user || 
+        (requiredRole === 'super_admin' && user.role !== 'super_admin') ||
+        (requiredRole === 'admin' && !['super_admin', 'admin_centro'].includes(user.role))) {
+      throw Boom.forbidden(`Se requiere rol ${requiredRole}`);
+    }
+    
+    // Para admins de centro, verificar que estén aprobados
+    if (user.role === 'admin_centro' && user.pendienteAprobacion === 'true') {
+      throw Boom.forbidden('Administrador pendiente de aprobación');
+    }
+    
+    return true;
+  }
 }
 
-module.exports = UserService;
+module.exports = new UserService();

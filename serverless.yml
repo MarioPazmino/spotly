@@ -1,11 +1,39 @@
 # org: mariora
 app: alquiler-canchas-api
 service: alquiler-canchas-api
+# Variables comunes para reutilización
+custom:
+  stage: ${opt:stage, 'dev'}
+  tablePrefix: -${self:custom.stage}
+  domain: tucanchasdeportivas.com
+  cognitoGroups:
+    superAdmin: super_admin
+    adminCentro: admin_centro
+    cliente: cliente
+  commonEnvVars:
+    STAGE: ${self:custom.stage}
+    RESERVAS_TABLE: Reservas${self:custom.tablePrefix}
+    CENTROS_DEPORTIVOS_TABLE: CentrosDeportivos${self:custom.tablePrefix}
+    CANCHAS_TABLE: Canchas${self:custom.tablePrefix}
+    USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
+    SCHEDULES_TABLE: Horarios${self:custom.tablePrefix}
+    PAGOS_TABLE: Pagos${self:custom.tablePrefix}
+    RESENAS_TABLE: Resenas${self:custom.tablePrefix}
+    NOTIFICACIONES_TABLE: Notificaciones${self:custom.tablePrefix}
+    COGNITO_USER_POOL_ID: !Ref CognitoUserPool
+    COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
+    COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
+    SUPER_ADMIN_GROUP_NAME: ${self:custom.cognitoGroups.superAdmin}
+    ADMIN_CENTRO_GROUP_NAME: ${self:custom.cognitoGroups.adminCentro}
+    CLIENTE_GROUP_NAME: ${self:custom.cognitoGroups.cliente}
+    AWS_REGION: us-east-1
+    ADMIN_DOMAINS: "${self:custom.domain}"
 
 provider:
   name: aws
   runtime: nodejs18.x
   region: us-east-1
+  environment: ${self:custom.commonEnvVars}
   iam:
     role:
       statements:
@@ -18,93 +46,75 @@ provider:
             - dynamodb:UpdateItem
             - dynamodb:GetItem
           Resource:
-          - !GetAtt CentrosDeportivosTable.Arn
-          - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/*"]]
-          - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/index/UserIdIndex"]]
-          - !GetAtt CanchasTable.Arn
-          - !Join ["", [!GetAtt CanchasTable.Arn, "/*"]]
-          - !GetAtt UsuariosTable.Arn  
-          - !Join ["", [!GetAtt UsuariosTable.Arn, "/index/EmailIndex"]]
-          - !Join ["", [!GetAtt UsuariosTable.Arn, "/index/PendienteAprobacionIndex"]]
-          - !GetAtt HorariosTable.Arn
-          - !Join ["", [!GetAtt HorariosTable.Arn, "/*"]]
-          - !Join ["", [!GetAtt HorariosTable.Arn, "/index/CanchaFechaIndex"]]
-          - !Join ["", [!GetAtt HorariosTable.Arn, "/index/ReservaIdIndex"]]
-          - !Join ["", [!GetAtt HorariosTable.Arn, "/index/UserIdIndex"]]
-          - !GetAtt ReservasTable.Arn
-          - !Join ["", [!GetAtt ReservasTable.Arn, "/*"]]
-          - !Join ["", [!GetAtt ReservasTable.Arn, "/index/CanchaFechaIndex"]]
-          - !Join ["", [!GetAtt ReservasTable.Arn, "/index/UserIdIndex"]]
-          - !Join ["", [!GetAtt ReservasTable.Arn, "/index/HorarioIdIndex"]]
-          - !GetAtt PagosTable.Arn
-          - !Join ["", [!GetAtt PagosTable.Arn, "/*"]]
-          - !Join ["", [!GetAtt PagosTable.Arn, "/index/ReservaIndex"]]
-          - !Join ["", [!GetAtt PagosTable.Arn, "/index/UserIndex"]]
-          - !GetAtt ResenasTable.Arn
-          - !Join ["", [!GetAtt ResenasTable.Arn, "/*"]]
-          - !Join ["", [!GetAtt ResenasTable.Arn, "/index/UserIndex"]]
-          - !Join ["", [!GetAtt ResenasTable.Arn, "/index/CanchaIndex"]]
-          - !Join ["", [!GetAtt ResenasTable.Arn, "/index/CentroDeportivoIndex"]]
-          - !Join ["", [!GetAtt ResenasTable.Arn, "/index/ReservaIndex"]]
-          - !GetAtt NotificacionesTable.Arn
-          - !Join ["", [!GetAtt NotificacionesTable.Arn, "/*"]]
-          - !Join ["", [!GetAtt NotificacionesTable.Arn, "/index/ReceptorIndex"]]
-          - !Join ["", [!GetAtt NotificacionesTable.Arn, "/index/EmisorIndex"]]
-          
-  environment:
-    STAGE: ${opt:stage, 'dev'}
-    RESERVAS_TABLE: Reservas-${opt:stage, 'dev'}
-    CENTROS_DEPORTIVOS_TABLE: CentrosDeportivos-${opt:stage, 'dev'}
-    CANCHAS_TABLE: Canchas-${opt:stage, 'dev'}
-    USUARIOS_TABLE: Usuarios-${opt:stage, 'dev'}
-    SCHEDULES_TABLE: Horarios-${opt:stage, 'dev'}
-    PAGOS_TABLE: Pagos-${opt:stage, 'dev'}
-    RESENAS_TABLE: Resenas-${opt:stage, 'dev'}
-    NOTIFICACIONES_TABLE: Notificaciones-${opt:stage, 'dev'}
-    COGNITO_USER_POOL_ID: !Ref CognitoUserPool
-    COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
-    COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
-    SUPER_ADMIN_GROUP_NAME: super_admin
-    ADMIN_CENTRO_GROUP_NAME: admin_centro
-    CLIENTE_GROUP_NAME: cliente
-    TOKEN_EXPIRATION: 3600 # En segundos (1 hora) 
-    AWS_REGION: us-east-1
-    ADMIN_DOMAINS: "tucanchasdeportivas.com"
-    
+            # Recursos para tabla CentrosDeportivos
+            - !GetAtt CentrosDeportivosTable.Arn
+            - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/*"]]
+            - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/index/UserIdIndex"]]
+            # Recursos para tabla Canchas
+            - !GetAtt CanchasTable.Arn
+            - !Join ["", [!GetAtt CanchasTable.Arn, "/*"]]
+            # Recursos para tabla Usuarios
+            - !GetAtt UsuariosTable.Arn  
+            - !Join ["", [!GetAtt UsuariosTable.Arn, "/index/EmailIndex"]]
+            - !Join ["", [!GetAtt UsuariosTable.Arn, "/index/PendienteAprobacionIndex"]]
+            # Recursos para tabla Horarios
+            - !GetAtt HorariosTable.Arn
+            - !Join ["", [!GetAtt HorariosTable.Arn, "/*"]]
+            - !Join ["", [!GetAtt HorariosTable.Arn, "/index/CanchaFechaIndex"]]
+            - !Join ["", [!GetAtt HorariosTable.Arn, "/index/ReservaIdIndex"]]
+            - !Join ["", [!GetAtt HorariosTable.Arn, "/index/UserIdIndex"]]
+            # Recursos para tabla Reservas
+            - !GetAtt ReservasTable.Arn
+            - !Join ["", [!GetAtt ReservasTable.Arn, "/*"]]
+            - !Join ["", [!GetAtt ReservasTable.Arn, "/index/CanchaFechaIndex"]]
+            - !Join ["", [!GetAtt ReservasTable.Arn, "/index/UserIdIndex"]]
+            - !Join ["", [!GetAtt ReservasTable.Arn, "/index/HorarioIdIndex"]]
+            # Recursos para tabla Pagos
+            - !GetAtt PagosTable.Arn
+            - !Join ["", [!GetAtt PagosTable.Arn, "/*"]]
+            - !Join ["", [!GetAtt PagosTable.Arn, "/index/ReservaIndex"]]
+            - !Join ["", [!GetAtt PagosTable.Arn, "/index/UserIndex"]]
+            # Recursos para tabla Reseñas
+            - !GetAtt ResenasTable.Arn
+            - !Join ["", [!GetAtt ResenasTable.Arn, "/*"]]
+            - !Join ["", [!GetAtt ResenasTable.Arn, "/index/UserIndex"]]
+            - !Join ["", [!GetAtt ResenasTable.Arn, "/index/CanchaIndex"]]
+            - !Join ["", [!GetAtt ResenasTable.Arn, "/index/CentroDeportivoIndex"]]
+            - !Join ["", [!GetAtt ResenasTable.Arn, "/index/ReservaIndex"]]
+            # Recursos para tabla Notificaciones
+            - !GetAtt NotificacionesTable.Arn
+            - !Join ["", [!GetAtt NotificacionesTable.Arn, "/*"]]
+            - !Join ["", [!GetAtt NotificacionesTable.Arn, "/index/ReceptorIndex"]]
+            - !Join ["", [!GetAtt NotificacionesTable.Arn, "/index/EmisorIndex"]]     
 functions:
-  # Una única función para toda la API
   api:
     handler: handler.api
     events:
       - httpApi:
           path: /{proxy+}
           method: ANY
-  
-  # Funciones Lambda para Cognito
+  # Funciones Lambda para Cognito con configuraciones simplificadas
   cognitoPreSignUp:
     handler: src/cognito/preSignUp.handler
     environment:
-      ADMIN_DOMAINS: "tucanchasdeportivas.com"
+      ADMIN_DOMAINS: ${self:custom.domain}
       COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
       COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
-  
   cognitoPostConfirmation:
     handler: src/cognito/postConfirmation.handler
     environment:
-      USUARIOS_TABLE: Usuarios-${opt:stage, 'dev'}
+      USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
       COGNITO_USER_POOL_ID: !Ref CognitoUserPool
-      SUPER_ADMIN_GROUP_NAME: super_admin
-      ADMIN_CENTRO_GROUP_NAME: admin_centro
-      CLIENTE_GROUP_NAME: cliente
+      SUPER_ADMIN_GROUP_NAME: ${self:custom.cognitoGroups.superAdmin}
+      ADMIN_CENTRO_GROUP_NAME: ${self:custom.cognitoGroups.adminCentro}
+      CLIENTE_GROUP_NAME: ${self:custom.cognitoGroups.cliente}
       COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
       COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
-  
   cognitoPostAuthentication:
     handler: src/cognito/postAuthentication.handler
     environment:
-      USUARIOS_TABLE: Usuarios-${opt:stage, 'dev'}
-      
-  # Nueva función para gestionar aprobaciones de administradores
+      USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
+  # Funciones para la gestión de administradores
   aprobarAdminCentro:
     handler: src/admin/aprobarAdminCentro.handler
     events:
@@ -116,11 +126,9 @@ functions:
             scopes:
               - email
     environment:
-      USUARIOS_TABLE: Usuarios-${opt:stage, 'dev'}
+      USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
       COGNITO_USER_POOL_ID: !Ref CognitoUserPool
-      ADMIN_CENTRO_GROUP_NAME: admin_centro
-      
-  # Nueva función para listar administradores pendientes
+      ADMIN_CENTRO_GROUP_NAME: ${self:custom.cognitoGroups.adminCentro} 
   listarAdminsPendientes:
     handler: src/admin/listarAdminsPendientes.handler
     events:
@@ -132,15 +140,16 @@ functions:
             scopes:
               - email
     environment:
-      USUARIOS_TABLE: Usuarios-${opt:stage, 'dev'}
-
+      USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
 resources:
   Resources:
-    # Definición del HTTP API Gateway
+    #======================================================================================#
+    #=============================== API Gateway y Dominios ===============================#
+    #======================================================================================#
     HttpApi:
       Type: AWS::ApiGatewayV2::Api
       Properties:
-        Name: alquiler-canchas-api-${opt:stage, 'dev'}
+        Name: alquiler-canchas-api-${self:custom.stage}
         ProtocolType: HTTP
         CorsConfiguration:
           AllowHeaders:
@@ -157,7 +166,6 @@ resources:
             - OPTIONS
           AllowOrigins:
             - '*'
-
     # Autorizador de Cognito para API Gateway
     CognitoAuthorizer:
       Type: AWS::ApiGatewayV2::Authorizer
@@ -172,44 +180,40 @@ resources:
             - !Ref CognitoUserPoolMobileClient
           Issuer: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPool}
         Name: CognitoAuthorizer
-
     # Dominio personalizado para API Gateway
     ApiGatewayDomainName:
       Type: AWS::ApiGatewayV2::DomainName
       Properties:
-        DomainName: api.tucanchasdeportivas.com
+        DomainName: api.${self:custom.domain}
         DomainNameConfigurations:
           - EndpointType: REGIONAL
             CertificateArn: arn:aws:acm:us-east-1:237029655206:certificate/7c263b6e-d31c-48bd-bb3a-73933b7d5d6f
-
     # Mapeo de API Gateway al dominio personalizado
     ApiGatewayMapping:
       Type: AWS::ApiGatewayV2::ApiMapping
       DependsOn:
         - ApiGatewayDomainName
       Properties:
-        DomainName: api.tucanchasdeportivas.com
+        DomainName: api.${self:custom.domain}
         ApiId: !Ref HttpApi
         Stage: $default
-
     # Registro DNS para el dominio API
     ApiDomainRecord:
       Type: AWS::Route53::RecordSet
       Properties:
         HostedZoneId: Z027980929X1P0VZNXKFN # ID de tu zona existente
-        Name: api.tucanchasdeportivas.com
+        Name: api.${self:custom.domain}
         Type: A
         AliasTarget:
           HostedZoneId: !GetAtt ApiGatewayDomainName.RegionalHostedZoneId
           DNSName: !GetAtt ApiGatewayDomainName.RegionalDomainName
-    
     #======================================================================================#
     #================================Tablas DynamoDB=======================================#
     #======================================================================================#
     CentrosDeportivosTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: CentrosDeportivos-${opt:stage, 'dev'}
+        TableName: CentrosDeportivos${self:custom.tablePrefix}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: centroId
@@ -226,11 +230,10 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-
     CanchasTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: Canchas-${opt:stage, 'dev'}
+        TableName: Canchas${self:custom.tablePrefix}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: canchaId
@@ -247,11 +250,10 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-
     ReservasTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: Reservas-${opt:stage, 'dev'}
+        TableName: Reservas${self:custom.tablePrefix}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: ReservaId
@@ -288,19 +290,18 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-
-    # Tabla de Usuarios actualizada con un nuevo índice para aprobaciones pendientes
+    # Tabla de Usuarios
     UsuariosTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: Usuarios-${opt:stage, 'dev'}
+        TableName: Usuarios${self:custom.tablePrefix}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: userId     
             AttributeType: S
           - AttributeName: email
             AttributeType: S
-          - AttributeName: pendienteAprobacion  # Nuevo atributo para filtrar usuarios pendientes
+          - AttributeName: pendienteAprobacion
             AttributeType: S
         KeySchema:
           - AttributeName: userId     
@@ -312,17 +313,16 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-          - IndexName: PendienteAprobacionIndex  # Nuevo índice para consultar usuarios pendientes
+          - IndexName: PendienteAprobacionIndex
             KeySchema:
               - AttributeName: pendienteAprobacion
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-
     HorariosTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: Horarios-${opt:stage, 'dev'}
+        TableName: Horarios${self:custom.tablePrefix}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: horarioId
@@ -359,11 +359,10 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-
     PagosTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: Pagos-${opt:stage, 'dev'}
+        TableName: Pagos${self:custom.tablePrefix}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: pagoId
@@ -388,12 +387,11 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-
-    # Tabla para Reseñas actualizada
+    # Tabla para Reseñas
     ResenasTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: Resenas-${opt:stage, 'dev'}
+        TableName: Resenas${self:custom.tablePrefix}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: resenaId
@@ -434,12 +432,11 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-
     # Tabla para Notificaciones
     NotificacionesTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: Notificaciones-${opt:stage, 'dev'}
+        TableName: Notificaciones${self:custom.tablePrefix}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: notificacionId
@@ -464,15 +461,13 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-
     #======================================================================================#
     #====================================COGNITO==========================================#
     #======================================================================================#
-    # User Pool único
     CognitoUserPool:
       Type: AWS::Cognito::UserPool
       Properties:
-        UserPoolName: alquiler-canchas-users-${opt:stage, 'dev'}
+        UserPoolName: alquiler-canchas-users-${self:custom.stage}
         AutoVerifiedAttributes:
           - email
         UsernameAttributes:
@@ -523,32 +518,28 @@ resources:
           PostConfirmation: !GetAtt CognitoPostConfirmationFunction.Arn
           PreAuthentication: !Ref AWS::NoValue
           PostAuthentication: !GetAtt CognitoPostAuthenticationFunction.Arn
-
-    # Definición de los grupos de usuarios
+    # Definición de los grupos de usuarios usando variables
     SuperAdminGroup:
       Type: AWS::Cognito::UserPoolGroup
       Properties:
-        GroupName: super_admin
+        GroupName: ${self:custom.cognitoGroups.superAdmin}
         Description: Grupo para super administradores del sistema
         UserPoolId: !Ref CognitoUserPool
         Precedence: 1
-
     AdminCentroGroup:
       Type: AWS::Cognito::UserPoolGroup
       Properties:
-        GroupName: admin_centro
+        GroupName: ${self:custom.cognitoGroups.adminCentro}
         Description: Grupo para administradores de centros deportivos
         UserPoolId: !Ref CognitoUserPool
         Precedence: 10
-
     ClienteGroup:
       Type: AWS::Cognito::UserPoolGroup
       Properties:
-        GroupName: cliente
+        GroupName: ${self:custom.cognitoGroups.cliente}
         Description: Grupo para clientes de la app móvil
         UserPoolId: !Ref CognitoUserPool
         Precedence: 20
-
     # Permisos para las funciones Lambda de Cognito
     CognitoPreSignUpPermission:
       Type: AWS::Lambda::Permission
@@ -556,32 +547,28 @@ resources:
         Action: lambda:InvokeFunction
         FunctionName: !GetAtt CognitoPreSignUpFunction.Arn
         Principal: cognito-idp.amazonaws.com
-        SourceArn: !GetAtt CognitoUserPool.Arn 
-        
+        SourceArn: !GetAtt CognitoUserPool.Arn      
     CognitoPostConfirmationPermission:
       Type: AWS::Lambda::Permission
       Properties:
         Action: lambda:InvokeFunction
         FunctionName: !GetAtt CognitoPostConfirmationFunction.Arn
         Principal: cognito-idp.amazonaws.com
-        SourceArn: !GetAtt CognitoUserPool.Arn
-        
+        SourceArn: !GetAtt CognitoUserPool.Arn  
     CognitoPostAuthenticationPermission:
       Type: AWS::Lambda::Permission
       Properties:
         Action: lambda:InvokeFunction
         FunctionName: !GetAtt CognitoPostAuthenticationFunction.Arn
         Principal: cognito-idp.amazonaws.com
-        SourceArn: !GetAtt CognitoUserPool.Arn
-        
+        SourceArn: !GetAtt CognitoUserPool.Arn    
     # Dominio para la UI de Cognito
     CognitoUserPoolDomain:
       Type: AWS::Cognito::UserPoolDomain
       Properties:
-        Domain: tucanchasdeportivas-${opt:stage, 'dev'}
-        UserPoolId: !Ref CognitoUserPool
-        
-    # Identity Provider para Google
+        Domain: ${self:custom.domain}-${self:custom.stage}
+        UserPoolId: !Ref CognitoUserPool 
+    # Identity Providers
     GoogleIdentityProvider:
       Type: AWS::Cognito::UserPoolIdentityProvider
       Properties:
@@ -596,8 +583,6 @@ resources:
           email: email
           name: name
           picture: picture
-          
-    # Identity Provider para Facebook
     FacebookIdentityProvider:
       Type: AWS::Cognito::UserPoolIdentityProvider
       Properties:
@@ -612,8 +597,7 @@ resources:
           email: email
           name: name
           picture: picture
-    
-    # App Client para aplicación web (Administradores)
+    # Configuración base para clientes de Cognito
     CognitoUserPoolWebClient:
       Type: AWS::Cognito::UserPoolClient
       DependsOn:
@@ -632,9 +616,9 @@ resources:
           - Google
           - Facebook
         CallbackURLs:
-          - https://dashboard.tucanchasdeportivas.com/callback
+          - https://dashboard.${self:custom.domain}/callback
         LogoutURLs:
-          - https://dashboard.tucanchasdeportivas.com/logout
+          - https://dashboard.${self:custom.domain}/logout
         AllowedOAuthFlows:
           - code
           - implicit
@@ -665,8 +649,7 @@ resources:
           - custom:role
           - custom:registration_source
           - custom:pendiente_aprobacion
-    
-    # App Client para Mobile (React Native)
+    # App Client para Mobile con configuración específica
     CognitoUserPoolMobileClient:
       Type: AWS::Cognito::UserPoolClient
       DependsOn: 
@@ -701,8 +684,8 @@ resources:
           AccessToken: hours
           IdToken: hours
           RefreshToken: days
-        AccessTokenValidity: 24
-        IdTokenValidity: 24
+        AccessTokenValidity: 24  # Diferente del Web Client
+        IdTokenValidity: 24      # Diferente del Web Client
         RefreshTokenValidity: 30
         ReadAttributes:
           - email
@@ -718,8 +701,7 @@ resources:
           - custom:role
           - custom:registration_source
           - custom:pendiente_aprobacion
-
-    # Función Lambda PreSignUp
+    # Funciones Lambda con referencia reutilizable a variables de entorno
     CognitoPreSignUpFunction:
       Type: AWS::Lambda::Function
       Properties:
@@ -728,11 +710,9 @@ resources:
         Role: !GetAtt CognitoLambdaRole.Arn
         Environment:
           Variables:
-            ADMIN_DOMAINS: "tucanchasdeportivas.com"
+            ADMIN_DOMAINS: ${self:custom.domain}
             COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
             COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
-
-    # Función Lambda PostConfirmation
     CognitoPostConfirmationFunction:
       Type: AWS::Lambda::Function
       Properties:
@@ -741,15 +721,13 @@ resources:
         Role: !GetAtt CognitoLambdaRole.Arn
         Environment:
           Variables:
-            USUARIOS_TABLE: Usuarios-${opt:stage, 'dev'}
+            USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
             COGNITO_USER_POOL_ID: !Ref CognitoUserPool
-            SUPER_ADMIN_GROUP_NAME: super_admin
-            ADMIN_CENTRO_GROUP_NAME: admin_centro
-            CLIENTE_GROUP_NAME: cliente
+            SUPER_ADMIN_GROUP_NAME: ${self:custom.cognitoGroups.superAdmin}
+            ADMIN_CENTRO_GROUP_NAME: ${self:custom.cognitoGroups.adminCentro}
+            CLIENTE_GROUP_NAME: ${self:custom.cognitoGroups.cliente}
             COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
             COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
-
-    # Función Lambda PostAuthentication
     CognitoPostAuthenticationFunction:
       Type: AWS::Lambda::Function
       Properties:
@@ -758,9 +736,8 @@ resources:
         Role: !GetAtt CognitoLambdaRole.Arn
         Environment:
           Variables:
-            USUARIOS_TABLE: Usuarios-${opt:stage, 'dev'}
-
-    # Rol IAM para las funciones Lambda de Cognito
+            USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
+    # Roles IAM optimizados
     CognitoLambdaRole:
       Type: AWS::IAM::Role
       Properties:
@@ -780,11 +757,15 @@ resources:
               Statement:
                 - Effect: Allow
                   Action:
-                    - dynamodb:*
-                  Resource:
+                    - dynamodb:PutItem
+                    - dynamodb:Query
+                    - dynamodb:Scan
+                    - dynamodb:DeleteItem
+                    - dynamodb:UpdateItem
+                    - dynamodb:GetItem
+                  Resource: 
                     - !GetAtt UsuariosTable.Arn
-                    - !Join ["", [!GetAtt UsuariosTable.Arn, "/index/EmailIndex"]]
-                    - !Join ["", [!GetAtt UsuariosTable.Arn, "/index/PendienteAprobacionIndex"]]
+                    - !Join ["", [!GetAtt UsuariosTable.Arn, "/index/*"]]
           - PolicyName: CognitoAccess
             PolicyDocument:
               Version: '2012-10-17'
@@ -792,14 +773,12 @@ resources:
                 - Effect: Allow
                   Action:
                     - cognito-idp:AdminAddUserToGroup
-                    - cognito-idp:AdminUpdateUserAttributes
+                    - cognito-idp:AdminRemoveUserFromGroup
+                    - cognito-idp:AdminListGroupsForUser
                     - cognito-idp:AdminGetUser
                     - cognito-idp:ListUsers
-                  Resource:
-                    - !GetAtt CognitoUserPool.Arn
-                    
-    # Rol IAM para las funciones Lambda de aprobación de admin
-    AdminApprovalLambdaRole:
+                  Resource: !GetAtt CognitoUserPool.Arn
+    AdminLambdaRole:
       Type: AWS::IAM::Role
       Properties:
         AssumeRolePolicyDocument:
@@ -812,19 +791,16 @@ resources:
         ManagedPolicyArns:
           - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         Policies:
-          - PolicyName: DynamoDBAdminAccess
+          - PolicyName: DynamoDBAccess
             PolicyDocument:
               Version: '2012-10-17'
               Statement:
                 - Effect: Allow
                   Action:
                     - dynamodb:Query
-                    - dynamodb:Scan
                     - dynamodb:GetItem
                     - dynamodb:UpdateItem
-                  Resource:
-                    - !GetAtt UsuariosTable.Arn
-                    - !Join ["", [!GetAtt UsuariosTable.Arn, "/index/PendienteAprobacionIndex"]]
+                  Resource: !GetAtt UsuariosTable.Arn
           - PolicyName: CognitoAdminAccess
             PolicyDocument:
               Version: '2012-10-17'
@@ -832,57 +808,22 @@ resources:
                 - Effect: Allow
                   Action:
                     - cognito-idp:AdminAddUserToGroup
-                    - cognito-idp:AdminUpdateUserAttributes
                     - cognito-idp:AdminGetUser
-                    - cognito-idp:ListUsers
-                  Resource:
-                    - !GetAtt CognitoUserPool.Arn
-                    
-    # Función Lambda para aprobar administradores
-    AprobarAdminCentroFunction:
-      Type: AWS::Lambda::Function
-      Properties:
-        Handler: src/admin/aprobarAdminCentro.handler
-        Runtime: nodejs18.x
-        Role: !GetAtt AdminApprovalLambdaRole.Arn
-        Environment:
-          Variables:
-            USUARIOS_TABLE: Usuarios-${opt:stage, 'dev'}
-            COGNITO_USER_POOL_ID: !Ref CognitoUserPool
-            ADMIN_CENTRO_GROUP_NAME: admin_centro
-    
-    # Función Lambda para listar administradores pendientes
-    ListarAdminsPendientesFunction:
-      Type: AWS::Lambda::Function
-      Properties:
-        Handler: src/admin/listarAdminsPendientes.handler
-        Runtime: nodejs18.x
-        Role: !GetAtt AdminApprovalLambdaRole.Arn
-        Environment:
-          Variables:
-            USUARIOS_TABLE: Usuarios-${opt:stage, 'dev'}
-            
-  Outputs:
-    HttpApiEndpoint:
-      Description: "API Gateway endpoint URL"
-      Value: !GetAtt HttpApi.ApiEndpoint
-    
-    CognitoUserPoolId:
-      Description: "User Pool ID"
-      Value: !Ref CognitoUserPool
-      
-    CognitoWebClientId:
-      Description: "Web client ID"
-      Value: !Ref CognitoUserPoolWebClient
-      
-    CognitoMobileClientId:
-      Description: "Mobile client ID"
-      Value: !Ref CognitoUserPoolMobileClient
-      
-    CognitoDomain:
-      Description: "Cognito hosted UI domain"
-      Value: !Sub https://${CognitoUserPoolDomain}.auth.${AWS::Region}.amazoncognito.com
-      
-    ApiDomainName:
-      Description: "Custom domain for API"
-      Value: "api.tucanchasdeportivas.com"
+                  Resource: !GetAtt CognitoUserPool.Arn
+# Outputs para fácil referencia de recursos importantes
+Outputs:
+  UserPoolId:
+    Value: !Ref CognitoUserPool
+    Description: ID del Pool de Usuarios de Cognito
+  WebClientId:
+    Value: !Ref CognitoUserPoolWebClient
+    Description: ID del cliente web para aplicación administrativa
+  MobileClientId:
+    Value: !Ref CognitoUserPoolMobileClient
+    Description: ID del cliente móvil para aplicación React Native
+  ApiEndpoint:
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+    Description: URL de la API HTTP Gateway
+  CustomDomainEndpoint:
+    Value: !Sub https://api.${self:custom.domain}
+    Description: URL personalizada para la API

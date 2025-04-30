@@ -4,37 +4,69 @@ const { USUARIOS_TABLE } = process.env;
 const dynamoDB = new AWS.DynamoDB.DocumentClient();
 
 class UserRepository {
+  constructor() {
+    this.USUARIOS_TABLE = process.env.USUARIOS_TABLE;
+    this.dynamoDB = new AWS.DynamoDB.DocumentClient();
+  }
+  // Obtener usuario por email con manejo de errores
   async findByEmail(email) {
     const params = {
-      TableName: USUARIOS_TABLE,
+      TableName: this.USUARIOS_TABLE,
       IndexName: 'EmailIndex',
       KeyConditionExpression: 'email = :email',
       ExpressionAttributeValues: {
-        ':email': email,
-      },
+        ':email': email
+      }
     };
-    const result = await dynamoDB.query(params).promise();
-    return result.Items && result.Items.length > 0 ? result.Items[0] : null;
+    try {
+      const result = await this.dynamoDB.query(params).promise();
+      return result.Items?.[0] || null;
+    } catch (error) {
+      console.error('Error finding user by email:', error);
+      throw error;
+    }
   }
+  // Guardar usuario con validación de datos básicos
   async save(user) {
+    if (!user.userId || !user.email) {
+      throw new Error('User must have userId and email');
+    }
     const params = {
-      TableName: USUARIOS_TABLE,
-      Item: user,
+      TableName: this.USUARIOS_TABLE,
+      Item: user
     };
-    await dynamoDB.put(params).promise();
-    return user;
+    try {
+      await this.dynamoDB.put(params).promise();
+      return user;
+    } catch (error) {
+      console.error('Error saving user:', error);
+      throw error;
+    }
   }
+  // Obtener usuario por ID
   async findById(userId) {
     const params = {
-      TableName: USUARIOS_TABLE,
-      Key: {
-        userId: userId,
-      },
-    }; 
-    const result = await dynamoDB.get(params).promise();
-    return result.Item || null;
+      TableName: this.USUARIOS_TABLE,
+      Key: { userId }
+    };
+    try {
+      const result = await this.dynamoDB.get(params).promise();
+      return result.Item || null;
+    } catch (error) {
+      console.error('Error finding user by ID:', error);
+      throw error;
+    }
   }
+  // Actualizar usuario con control de campos sensibles
   async update(userId, updateData) {
+    // Validar que no se intenten modificar campos sensibles sin autorización
+    const sensitiveFields = ['role', 'pendienteAprobacion'];
+    const attemptedSensitiveFields = Object.keys(updateData).filter(field => 
+      sensitiveFields.includes(field)
+    );
+    if (attemptedSensitiveFields.length > 0) {
+      throw new Error(`Cannot update sensitive fields: ${attemptedSensitiveFields.join(', ')}`);
+    }
     const updateExpressionParts = [];
     const expressionAttributeValues = { ':updatedAt': new Date().toISOString() };
     const expressionAttributeNames = { '#updatedAt': 'updatedAt' };
@@ -47,97 +79,103 @@ class UserRepository {
     }
     updateExpressionParts.push('#updatedAt = :updatedAt');
     const params = {
-      TableName: USUARIOS_TABLE,
+      TableName: this.USUARIOS_TABLE,
       Key: { userId },
       UpdateExpression: `SET ${updateExpressionParts.join(', ')}`,
       ExpressionAttributeNames: expressionAttributeNames,
       ExpressionAttributeValues: expressionAttributeValues,
-      ReturnValues: 'ALL_NEW',
-    };
-    const result = await dynamoDB.update(params).promise();
-    return result.Attributes || null;
-  }
-  async delete(userId) {
-    const params = {
-      TableName: USUARIOS_TABLE,
-      Key: {
-        userId: userId,
-      },
-      ReturnValues: 'ALL_OLD',
-    };
-    const result = await dynamoDB.delete(params).promise();
-    return result.Attributes || null;
-  }
-
-  async findByCognitoId(cognitoId) {
-    const params = {
-      TableName: USUARIOS_TABLE,
-      IndexName: 'CognitoIdIndex',
-      KeyConditionExpression: 'cognitoId = :cognitoId',
-      ExpressionAttributeValues: {
-        ':cognitoId': cognitoId,
-      },
-    };
-    const result = await dynamoDB.query(params).promise();
-    return result.Items && result.Items.length > 0 ? result.Items[0] : null;
-  }
-  async findByRole(role, options = {}) {
-    const params = {
-      TableName: USUARIOS_TABLE,
-      FilterExpression: 'role = :role',
-      ExpressionAttributeValues: {
-        ':role': role
-      }
-    };
-    const result = await dynamoDB.scan(params).promise();
-    return result.Items || [];
-  }
-  
-  async updateLastLogin(userId) {
-    const params = {
-      TableName: USUARIOS_TABLE,
-      Key: { userId },
-      UpdateExpression: 'SET lastLogin = :now, updatedAt = :now',
-      ExpressionAttributeValues: {
-        ':now': new Date().toISOString()
-      },
       ReturnValues: 'ALL_NEW'
     };
-    const result = await dynamoDB.update(params).promise();
-    return result.Attributes || null;
+    try {
+      const result = await this.dynamoDB.update(params).promise();
+      return result.Attributes || null;
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw error;
+    }
   }
-
-  async findAll(options = {}) {
-    const { limit = 20, lastEvaluatedKey, filters = {} } = options;
-    let params = {
-      TableName: USUARIOS_TABLE,
+  // Eliminar usuario
+  async delete(userId) {
+    const params = {
+      TableName: this.USUARIOS_TABLE,
+      Key: { userId },
+      ReturnValues: 'ALL_OLD'
+    };
+    try {
+      const result = await this.dynamoDB.delete(params).promise();
+      return result.Attributes || null;
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      throw error;
+    }
+  }
+  // Obtener administradores pendientes con paginación
+  async findPendingAdmins(limit = 20, lastEvaluatedKey = null) {
+    const params = {
+      TableName: this.USUARIOS_TABLE,
+      IndexName: 'PendienteAprobacionIndex',
+      KeyConditionExpression: 'pendienteAprobacion = :pendiente',
+      ExpressionAttributeValues: {
+        ':pendiente': 'true'
+      },
       Limit: limit
     };
     if (lastEvaluatedKey) {
-      params.ExclusiveStartKey = JSON.parse(Buffer.from(lastEvaluatedKey, 'base64').toString());
+      params.ExclusiveStartKey = lastEvaluatedKey;
     }
-    if (Object.keys(filters).length > 0) {
-      const filterExpressions = [];
-      params.ExpressionAttributeValues = {};
-      params.ExpressionAttributeNames = {};
-      Object.entries(filters).forEach(([key, value]) => {
-        const attrName = `#${key}`;
-        const attrValue = `:${key}`;
-        filterExpressions.push(`${attrName} = ${attrValue}`);
-        params.ExpressionAttributeValues[attrValue] = value;
-        params.ExpressionAttributeNames[attrName] = key;
-      });
-      params.FilterExpression = filterExpressions.join(' AND ');
+    try {
+      const result = await this.dynamoDB.query(params).promise();
+      return {
+        items: result.Items || [],
+        lastEvaluatedKey: result.LastEvaluatedKey,
+        count: result.Count
+      };
+    } catch (error) {
+      console.error('Error finding pending admins:', error);
+      throw error;
     }
-    const result = await dynamoDB.scan(params).promise();
-    return {
-      items: result.Items || [],
-      lastEvaluatedKey: result.LastEvaluatedKey 
-        ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString('base64') 
-        : null,
-      count: result.Count
-    };
+  }
+  // Actualizar estado de aprobación (permite actualizar otros campos relacionados)
+  async updateApprovalStatus(userId, status, additionalUpdates = {}) {
+    return this.update(userId, {
+      pendienteAprobacion: status,
+      ...additionalUpdates
+    });
+  }
+  // Validar rol del usuario con mensajes detallados
+  async validateUserRole(userId, requiredRole) {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new Error(`User not found: ${userId}`);
+    }
+    if (user.role !== requiredRole) {
+      throw new Error(`User ${userId} has role '${user.role}' but required role is '${requiredRole}'`);
+    }
+    return true;
+  }
+  // Validación especializada para clientes
+  async ensureIsCliente(userId) {
+    const user = await this.findById(userId);
+    if (!user || user.role !== 'cliente') {
+      throw new Error(`User ${userId} is not a cliente`);
+    }
+    return true;
+  }
+
+  // Validación especializada para administradores (incluye pendientes)
+  async ensureIsAdmin(userId, mustBeApproved = true) {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new Error(`User not found: ${userId}`);
+    }
+    const isAdmin = user.role === 'admin_centro' || user.role === 'super_admin';
+    if (!isAdmin) {
+      throw new Error(`User ${userId} is not an administrator`);
+    }
+    if (mustBeApproved && user.pendienteAprobacion === 'true') {
+      throw new Error(`Administrator ${userId} is pending approval`);
+    }
+    return true;
   }
 }
-
-module.exports = UserRepository;
+module.exports = new UserRepository();
