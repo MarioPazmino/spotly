@@ -4,25 +4,30 @@ const serverless = require('serverless-http');
 const cors = require('cors');
 const errorHandler = require('./src/interfaces/middlewares/errorHandler');
 const UserRepository = require('./src/infrastructure/repositories/userRepository');
-
 const routes = require('./src/interfaces/http/routes');
 
 const app = express();
 
-// Middleware
+// Configuración de middlewares
 app.set('userRepository', new UserRepository());
 
 app.use(cors({
-  exposedHeaders: ['X-Access-Token'] 
+  exposedHeaders: ['X-Access-Token'] // Permitir encabezados personalizados
 }));
-app.use(express.json());
+app.use(express.json()); // Parsear JSON en las solicitudes
 
+// Rutas principales
 app.use('/api', routes);
 
+// Ruta de salud (health check)
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'UP', message: 'API está funcionando correctamente' });
+  res.status(200).json({ 
+    status: 'UP', 
+    message: 'API está funcionando correctamente' 
+  });
 });
 
+// Manejo de rutas no encontradas
 app.use((req, res) => {
   res.status(404).json({ 
     statusCode: 404,
@@ -30,7 +35,10 @@ app.use((req, res) => {
     message: 'Ruta no encontrada' 
   });
 });
+
+// Middleware de manejo de errores
 app.use(errorHandler);
 
+// Exportar la aplicación para Serverless
 module.exports.handler = serverless(app);
 module.exports.app = app;

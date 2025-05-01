@@ -164,12 +164,13 @@ class UserService {
     }
     // Validar según tipo de registro
     const isWebRegistration = clientId === process.env.COGNITO_WEB_CLIENT_ID;
+
     if (isWebRegistration && userData.role !== 'admin_centro') {
       throw Boom.badRequest('Los registros desde web deben ser admin_centro');
     }
     
     if (!isWebRegistration && userData.role !== 'cliente') {
-      throw Boom.badRequest('Los registros desde móvil deben ser cliente');
+      throw Boom.badRequest('STOPPER ESTUVO AQUIA');
     }
   }
 

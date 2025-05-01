@@ -10,15 +10,15 @@ const { checkPermission } = require('../../../middlewares/authorization');
 const auth = authenticate.authenticate();
 
 // Rutas públicas
-router.post('/', UserController.createUser);
+router.post('/', UserController.createUser); // Registro de usuarios (cliente o admin_centro)
 
 // Rutas protegidas
-router.get('/:userId', auth, UserController.getUserById);
-router.put('/:userId', auth, UserController.updateUserProfile);
-router.delete('/:userId', auth, checkPermission('delete:user'), UserController.deleteUser);
+router.get('/:userId', auth, UserController.getUserById); // Obtener usuario por ID
+router.put('/:userId', auth, UserController.updateUserProfile); // Actualizar perfil de usuario
+router.delete('/:userId', auth, checkPermission('delete:user'), UserController.deleteUser); // Eliminar usuario
 
 // Rutas administrativas (solo super_admin)
-router.get('/pendientes', auth, checkPermission('approve:admin_centro'), UserController.listPendingAdmins);
-router.post('/aprobar/:userId', auth, checkPermission('approve:admin_centro'), UserController.approveAdminCenter);
+router.get('/pendientes', auth, checkPermission('approve:admin_centro'), UserController.listPendingAdmins); // Listar admins pendientes
+router.post('/aprobar/:userId', auth, checkPermission('approve:admin_centro'), UserController.approveAdminCenter); // Aprobar admin_centro
 
 module.exports = router;

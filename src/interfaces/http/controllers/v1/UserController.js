@@ -7,13 +7,14 @@ const UserService = require('../../../../infrastructure/services/userService');
 const registerSchema = Joi.object({
   email: Joi.string().email().required(),
   name: Joi.string().required(),
+  role: Joi.string().valid('cliente', 'admin_centro').required(), // Validar roles permitidos
   picture: Joi.string().uri().optional()
 });
 
 const updateSchema = Joi.object({
   name: Joi.string().optional(),
   picture: Joi.string().uri().optional()
-}).min(1);
+});
 
 exports.createUser = async (req, res, next) => {
   try {
@@ -33,6 +34,7 @@ exports.getUserById = async (req, res, next) => {
   try {
     const { userId } = req.params;
     const user = await UserService.getUserById(userId);
+    if (!user) throw Boom.notFound('Usuario no encontrado');
     return res.status(200).json(user);
   } catch (error) {
     next(error);
