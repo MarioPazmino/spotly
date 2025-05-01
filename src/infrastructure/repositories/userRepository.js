@@ -64,12 +64,24 @@ class UserRepository {
     }
   }
 
-  async updateApprovalStatus(userId, status, additionalUpdates = {}) {
-    return this.update(userId, {
-      pendienteAprobacion: status,
-      ...additionalUpdates
-    });
+  async updateApprovalStatus(userId, status) {
+    const params = {
+      TableName: this.USUARIOS_TABLE,
+      Key: { userId },
+      UpdateExpression: 'set pendienteAprobacion = :status, updatedAt = :now',
+      ExpressionAttributeValues: {
+        ':status': status,
+        ':now': new Date().toISOString()
+      }
+    };
+    try {
+      await this.dynamoDB.update(params).promise();
+    } catch (error) {
+      console.error('Error actualizando estado de aprobación:', error);
+      throw error;
+    }
   }
+
 
   async update(userId, updateData) {
     const updateExpressionParts = [];

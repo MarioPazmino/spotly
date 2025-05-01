@@ -64,11 +64,21 @@ class UserService {
     try {
       // Verificar permisos del superadmin
       await this.verifyAdminPermissions(adminId, 'super_admin');
-
+      const requester = await this.userRepository.findById(requesterId);
+      if (!requester || requester.role !== 'super_admin') {
+        throw Boom.forbidden('Solo los super administradores pueden aprobar administradores de centro');
+      }
+  
       // Obtener usuario pendiente
       const user = await this.userRepository.findById(userId);
-      if (!user || user.pendienteAprobacion !== 'true') {
-        throw Boom.notFound('Usuario pendiente no encontrado');
+      if (!user) {
+        throw Boom.notFound('Usuario no encontrado');
+      }
+      if (user.role !== 'admin_centro') {
+        throw Boom.badRequest('El usuario no es un administrador de centro');
+      }
+      if (user.pendienteAprobacion !== 'true') {
+        throw Boom.badRequest('El usuario ya ha sido aprobado');
       }
 
       // Actualizar estado en DynamoDB
@@ -200,6 +210,115 @@ class UserService {
     }
     return true;
   }
+
+  async handlePreSignUp(data) {
+    const { clientId, email } = data;
+    const domain = email.split('@')[1];
+    const isWebRegistration = clientId === process.env.COGNITO_WEB_CLIENT_ID;
+    const isMobileRegistration = clientId === process.env.COGNITO_MOBILE_CLIENT_ID;
+    const isAdminDomain = domain === process.env.ADMIN_DOMAINS;
+
+    const userAttributes = {
+      role: 'unknown',
+      pendienteAprobacion: 'true',
+      registrationSource: 'unknown',
+    };
+
+    if (isWebRegistration) {
+      userAttributes.role = 'admin_centro';
+      userAttributes.pendienteAprobacion = isAdminDomain ? 'false' : 'true';
+      userAttributes.registrationSource = 'web';
+    } else if (isMobileRegistration) {
+      userAttributes.role = 'cliente';
+      userAttributes.pendienteAprobacion = 'false';
+      userAttributes.registrationSource = 'mobile';
+    }
+
+    return userAttributes;
+  }
+
+
+  async handlePostConfirmation(data) {
+    const { userId, userAttributes } = data;
+
+    const user = {
+      userId,
+      email: userAttributes.email,
+      name: userAttributes.name || userAttributes.email.split('@')[0],
+      role: userAttributes.role || 'cliente',
+      pendienteAprobacion: userAttributes.pendienteAprobacion || 'true',
+      registrationSource: userAttributes.registrationSource || 'unknown',
+      picture: userAttributes.picture || '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const existingUser = await this.userRepository.findById(userId);
+    if (!existingUser) {
+      await this.userRepository.save(user);
+    }
+
+    const groupName =
+      user.role === 'cliente'
+        ? this.CLIENTE_GROUP_NAME
+        : user.role === 'admin_centro' && user.pendienteAprobacion === 'false'
+        ? this.ADMIN_CENTRO_GROUP_NAME
+        : user.role === 'super_admin'
+        ? this.SUPER_ADMIN_GROUP_NAME
+        : null;
+
+    if (groupName) {
+      await this.cognito
+        .adminAddUserToGroup({
+          UserPoolId: this.COGNITO_USER_POOL_ID,
+          Username: userId,
+          GroupName: groupName,
+        })
+        .promise();
+    }
+
+    return user;
+  }
+
+
+  async handlePostAuthentication(data) {
+    const { userId } = data;
+
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw Boom.notFound('Usuario no encontrado');
+    }
+
+    await this.userRepository.update(userId, {
+      lastLogin: new Date().toISOString(),
+    });
+
+    if (user.role === 'admin_centro' && user.pendienteAprobacion === 'false') {
+      const groups = await this.cognito
+        .adminListGroupsForUser({
+          UserPoolId: this.COGNITO_USER_POOL_ID,
+          Username: userId,
+        })
+        .promise();
+
+      const isAdminCentro = groups.Groups.some(
+        (g) => g.GroupName === this.ADMIN_CENTRO_GROUP_NAME
+      );
+
+      if (!isAdminCentro) {
+        await this.cognito
+          .adminAddUserToGroup({
+            UserPoolId: this.COGNITO_USER_POOL_ID,
+            Username: userId,
+            GroupName: this.ADMIN_CENTRO_GROUP_NAME,
+          })
+          .promise();
+      }
+    }
+
+    return { message: 'Autenticación completada' };
+  }
+
 }
 
 module.exports = new UserService();

@@ -88,3 +88,30 @@ exports.approveAdminCenter = async (req, res, next) => {
     next(error);
   }
 };
+
+exports.preSignUp = async (req, res, next) => {
+  try {
+    const result = await UserService.handlePreSignUp(req.body);
+    return res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.postConfirmation = async (req, res, next) => {
+  try {
+    const result = await UserService.handlePostConfirmation(req.body);
+    return res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.postAuthentication = async (req, res, next) => {
+  try {
+    const result = await UserService.handlePostAuthentication(req.body);
+    return res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
