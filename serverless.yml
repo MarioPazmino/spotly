@@ -93,54 +93,6 @@ functions:
       - httpApi:
           path: /{proxy+}
           method: ANY
-  # Funciones Lambda para Cognito con configuraciones simplificadas
-  cognitoPreSignUp:
-    handler: src/cognito/preSignUp.handler
-    environment:
-      ADMIN_DOMAINS: ${self:custom.domain}
-      COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
-      COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
-  cognitoPostConfirmation:
-    handler: src/cognito/postConfirmation.handler
-    environment:
-      USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
-      COGNITO_USER_POOL_ID: !Ref CognitoUserPool
-      SUPER_ADMIN_GROUP_NAME: ${self:custom.cognitoGroups.superAdmin}
-      ADMIN_CENTRO_GROUP_NAME: ${self:custom.cognitoGroups.adminCentro}
-      CLIENTE_GROUP_NAME: ${self:custom.cognitoGroups.cliente}
-      COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
-      COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
-  cognitoPostAuthentication:
-    handler: src/cognito/postAuthentication.handler
-    environment:
-      USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
-  # Funciones para la gestión de administradores
-  aprobarAdminCentro:
-    handler: src/admin/aprobarAdminCentro.handler
-    events:
-      - httpApi:
-          path: /admin/aprobar/{userId}
-          method: POST
-          authorizer:
-            name: CognitoAuthorizer
-            scopes:
-              - email
-    environment:
-      USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
-      COGNITO_USER_POOL_ID: !Ref CognitoUserPool
-      ADMIN_CENTRO_GROUP_NAME: ${self:custom.cognitoGroups.adminCentro} 
-  listarAdminsPendientes:
-    handler: src/admin/listarAdminsPendientes.handler
-    events:
-      - httpApi:
-          path: /admin/pendientes
-          method: GET
-          authorizer:
-            name: CognitoAuthorizer
-            scopes:
-              - email
-    environment:
-      USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
 resources:
   Resources:
     #======================================================================================#

@@ -1,6 +1,7 @@
 // src/interfaces/middlewares/errorHandler.js
 function errorHandler(error) {
   console.error('Error en la solicitud:', error);
+
   if (error.isBoom) {
     const { statusCode, payload } = error.output;
     return {
@@ -11,6 +12,7 @@ function errorHandler(error) {
       })
     };
   }
+
   const statusCode = error.statusCode || 500;
   return {
     statusCode,
@@ -23,4 +25,5 @@ function errorHandler(error) {
     })
   };
 }
+
 module.exports = errorHandler;

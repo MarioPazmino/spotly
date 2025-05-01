@@ -14,23 +14,45 @@ class UserService {
     this.SUPER_ADMIN_GROUP_NAME = process.env.SUPER_ADMIN_GROUP_NAME;
     this.CLIENTE_GROUP_NAME = process.env.CLIENTE_GROUP_NAME;
   }
-
   async registerUser(userData, clientId) {
     try {
       // Validar datos de entrada
       this.validateRegistrationData(userData, clientId);
-      
+
       // Crear usuario en base de datos
       const userId = uuidv4();
       const newUser = {
         userId,
         ...userData,
+        pendienteAprobacion: userData.role === 'admin_centro' ? 'true' : 'false', // Pendiente solo para admin_centro
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-      
+
       await this.userRepository.save(newUser);
-      
+
+      // Crear usuario en Cognito
+      await this.cognito.adminCreateUser({
+        UserPoolId: this.COGNITO_USER_POOL_ID,
+        Username: userId,
+        UserAttributes: [
+          { Name: 'email', Value: userData.email },
+          { Name: 'name', Value: userData.name },
+          { Name: 'custom:pendiente_aprobacion', Value: newUser.pendienteAprobacion },
+          { Name: 'custom:role', Value: userData.role }
+        ]
+      }).promise();
+
+      // Asignar al grupo correspondiente
+      const groupName = this.getGroupNameByRole(userData.role);
+      if (groupName) {
+        await this.cognito.adminAddUserToGroup({
+          UserPoolId: this.COGNITO_USER_POOL_ID,
+          Username: userId,
+          GroupName: groupName
+        }).promise();
+      }
+
       return newUser;
     } catch (error) {
       logger.error(`Error registering user: ${error.message}`, { error });
@@ -40,48 +62,47 @@ class UserService {
 
   async approveAdminCenter(userId, adminId) {
     try {
-      // Verificar permisos del administrador
+      // Verificar permisos del superadmin
       await this.verifyAdminPermissions(adminId, 'super_admin');
-      
+
       // Obtener usuario pendiente
       const user = await this.userRepository.findById(userId);
       if (!user || user.pendienteAprobacion !== 'true') {
         throw Boom.notFound('Usuario pendiente no encontrado');
       }
-      
+
       // Actualizar estado en DynamoDB
-      await this.userRepository.updateApprovalStatus(
-        userId,
-        'false',
-        {
-          fechaAprobacion: new Date().toISOString()
-        }
-      );
-      
+      await this.userRepository.updateApprovalStatus(userId, 'false', {
+        fechaAprobacion: new Date().toISOString()
+      });
+
       // Actualizar atributos en Cognito
       await this.cognito.adminUpdateUserAttributes({
         UserPoolId: this.COGNITO_USER_POOL_ID,
         Username: userId,
         UserAttributes: [
-          {
-            Name: 'custom:pendiente_aprobacion',
-            Value: 'false'
-          }
+          { Name: 'custom:pendiente_aprobacion', Value: 'false' }
         ]
       }).promise();
-      
-      // Añadir al grupo de admin_centro
-      await this.cognito.adminAddUserToGroup({
-        UserPoolId: this.COGNITO_USER_POOL_ID,
-        Username: userId,
-        GroupName: this.ADMIN_CENTRO_GROUP_NAME
-      }).promise();
-      
+
       logger.info(`Admin aprobado correctamente: ${userId}`);
       return { message: 'Administrador aprobado correctamente', userId };
     } catch (error) {
       logger.error(`Error aprobando admin: ${error.message}`, { error });
       throw Boom.boomify(error);
+    }
+  }
+
+  getGroupNameByRole(role) {
+    switch (role) {
+      case 'super_admin':
+        return this.SUPER_ADMIN_GROUP_NAME;
+      case 'admin_centro':
+        return this.ADMIN_CENTRO_GROUP_NAME;
+      case 'cliente':
+        return this.CLIENTE_GROUP_NAME;
+      default:
+        return null;
     }
   }
 
@@ -109,15 +130,10 @@ class UserService {
 
   async updateUserProfile(userId, updateData, requesterId) {
     try {
-      // Verificar que el solicitante pueda modificar este usuario
       if (userId !== requesterId) {
         await this.verifyAdminPermissions(requesterId, 'super_admin');
       }
-      
-      // Validar actualización
       this.validateUpdateData(updateData, userId, requesterId);
-      
-      // Realizar actualización
       return await this.userRepository.update(userId, {
         ...updateData,
         updatedAt: new Date().toISOString()
@@ -132,7 +148,6 @@ class UserService {
     try {
       // Solo super admins pueden eliminar usuarios
       await this.verifyAdminPermissions(requesterId, 'super_admin');
-      
       // Eliminar usuario
       return await this.userRepository.delete(userId);
     } catch (error) {
@@ -147,10 +162,8 @@ class UserService {
     if (!userData.email || !userData.name) {
       throw Boom.badRequest('Email y nombre son requeridos');
     }
-    
     // Validar según tipo de registro
     const isWebRegistration = clientId === process.env.COGNITO_WEB_CLIENT_ID;
-    
     if (isWebRegistration && userData.role !== 'admin_centro') {
       throw Boom.badRequest('Los registros desde web deben ser admin_centro');
     }
@@ -180,12 +193,10 @@ class UserService {
         (requiredRole === 'admin' && !['super_admin', 'admin_centro'].includes(user.role))) {
       throw Boom.forbidden(`Se requiere rol ${requiredRole}`);
     }
-    
     // Para admins de centro, verificar que estén aprobados
     if (user.role === 'admin_centro' && user.pendienteAprobacion === 'true') {
       throw Boom.forbidden('Administrador pendiente de aprobación');
     }
-    
     return true;
   }
 }

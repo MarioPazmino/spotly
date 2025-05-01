@@ -1,5 +1,6 @@
 // src/interfaces/middlewares/authorization.js
 const Boom = require('@hapi/boom');
+
 class AuthorizationMiddleware {
   constructor() {
     this.groupPermissions = {
@@ -16,6 +17,7 @@ class AuthorizationMiddleware {
       ]
     };
   }
+
   hasPermission(userGroups, requiredPermission) {
     return userGroups.some(group => {
       const permissions = this.groupPermissions[group] || [];
@@ -26,6 +28,7 @@ class AuthorizationMiddleware {
       );
     });
   }
+
   checkPermission(requiredPermission) {
     return (userGroups) => {
       if (!this.hasPermission(userGroups, requiredPermission)) {
@@ -34,4 +37,5 @@ class AuthorizationMiddleware {
     };
   }
 }
+
 module.exports = new AuthorizationMiddleware();
