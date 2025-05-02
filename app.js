@@ -2,14 +2,17 @@
 const express = require('express');
 const serverless = require('serverless-http');
 const cors = require('cors');
-const errorHandler = require('./src/interfaces/middlewares/errorHandler');
 const UserRepository = require('./src/infrastructure/repositories/userRepository');
+const errorHandler = require('./src/interfaces/middlewares/errorHandler');
 const routes = require('./src/interfaces/http/routes');
 
 const app = express();
 
+// Crear una única instancia del repositorio
+const userRepository = new UserRepository();
+
 // Configuración de middlewares
-app.set('userRepository', new UserRepository());
+app.set('userRepository', userRepository);
 
 app.use(cors({
   exposedHeaders: ['X-Access-Token'] // Permitir encabezados personalizados
@@ -38,7 +41,5 @@ app.use((req, res) => {
 
 // Middleware de manejo de errores
 app.use(errorHandler);
-
-// Exportar la aplicación para Serverless
 module.exports.handler = serverless(app);
 module.exports.app = app;

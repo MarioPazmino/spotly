@@ -1,7 +1,6 @@
 //src/infrastructure/services/userService.js
 const AWS = require('aws-sdk');
 const Boom = require('@hapi/boom');
-const { v4: uuidv4 } = require('uuid');
 const UserRepository = require('../repositories/userRepository');
 const logger = require('../../utils/logger');
 
@@ -14,41 +13,44 @@ class UserService {
     this.SUPER_ADMIN_GROUP_NAME = process.env.SUPER_ADMIN_GROUP_NAME;
     this.CLIENTE_GROUP_NAME = process.env.CLIENTE_GROUP_NAME;
   }
-  async registerUser(userData, clientId) {
+
+  async registerUser(userData) {
     try {
       // Validar datos de entrada
-      this.validateRegistrationData(userData, clientId);
+      this.validateRegistrationData(userData);
+
+      // Crear usuario en Cognito
+      const cognitoUser = await this.cognito.adminCreateUser({
+        UserPoolId: this.COGNITO_USER_POOL_ID,
+        Username: userData.email,
+        UserAttributes: [
+          { Name: 'email', Value: userData.email },
+          { Name: 'name', Value: userData.name },
+          { Name: 'custom:pendiente_aprobacion', Value: userData.role === 'admin_centro' ? 'true' : 'false' },
+          { Name: 'custom:role', Value: userData.role }
+        ]
+      }).promise();
+
+      // Obtener el sub (ID único generado por Cognito)
+      const userId = cognitoUser.User.Attributes.find(attr => attr.Name === 'sub').Value;
 
       // Crear usuario en base de datos
-      const userId = uuidv4();
       const newUser = {
         userId,
         ...userData,
-        pendienteAprobacion: userData.role === 'admin_centro' ? 'true' : 'false', // Pendiente solo para admin_centro
+        pendienteAprobacion: userData.role === 'admin_centro' ? 'true' : 'false',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
 
       await this.userRepository.save(newUser);
 
-      // Crear usuario en Cognito
-      await this.cognito.adminCreateUser({
-        UserPoolId: this.COGNITO_USER_POOL_ID,
-        Username: userId,
-        UserAttributes: [
-          { Name: 'email', Value: userData.email },
-          { Name: 'name', Value: userData.name },
-          { Name: 'custom:pendiente_aprobacion', Value: newUser.pendienteAprobacion },
-          { Name: 'custom:role', Value: userData.role }
-        ]
-      }).promise();
-
       // Asignar al grupo correspondiente
       const groupName = this.getGroupNameByRole(userData.role);
       if (groupName) {
         await this.cognito.adminAddUserToGroup({
           UserPoolId: this.COGNITO_USER_POOL_ID,
-          Username: userId,
+          Username: userData.email,
           GroupName: groupName
         }).promise();
       }
@@ -60,15 +62,11 @@ class UserService {
     }
   }
 
-  async approveAdminCenter(userId, adminId) {
+  async approveAdminCenter(userId, requesterId) {
     try {
       // Verificar permisos del superadmin
-      await this.verifyAdminPermissions(adminId, 'super_admin');
-      const requester = await this.userRepository.findById(requesterId);
-      if (!requester || requester.role !== 'super_admin') {
-        throw Boom.forbidden('Solo los super administradores pueden aprobar administradores de centro');
-      }
-  
+      await this.verifyAdminPermissions(requesterId, 'super_admin');
+
       // Obtener usuario pendiente
       const user = await this.userRepository.findById(userId);
       if (!user) {
@@ -143,7 +141,17 @@ class UserService {
       if (userId !== requesterId) {
         await this.verifyAdminPermissions(requesterId, 'super_admin');
       }
-      this.validateUpdateData(updateData, userId, requesterId);
+
+      // Validar campos sensibles
+      const sensitiveFields = ['role', 'pendienteAprobacion'];
+      const attemptedSensitiveFields = Object.keys(updateData).filter(field =>
+        sensitiveFields.includes(field)
+      );
+
+      if (attemptedSensitiveFields.length > 0 && userId !== requesterId) {
+        throw Boom.forbidden('No tienes permisos para modificar campos sensibles');
+      }
+
       return await this.userRepository.update(userId, {
         ...updateData,
         updatedAt: new Date().toISOString()
@@ -166,51 +174,33 @@ class UserService {
     }
   }
 
-  // Métodos auxiliares
-  validateRegistrationData(userData, clientId) {
+  validateRegistrationData(userData) {
     // Validaciones básicas
     if (!userData.email || !userData.name) {
       throw Boom.badRequest('Email y nombre son requeridos');
     }
-    // Validar según tipo de registro
-    const isWebRegistration = clientId === process.env.COGNITO_WEB_CLIENT_ID;
 
-    if (isWebRegistration && userData.role !== 'admin_centro') {
-      throw Boom.badRequest('Los registros desde web deben ser admin_centro');
-    }
-    
-    if (!isWebRegistration && userData.role !== 'cliente') {
-      throw Boom.badRequest('STOPPER ESTUVO AQUIA');
-    }
-  }
-
-  validateUpdateData(updateData, userId, requesterId) {
-    // No permitir modificar ciertos campos sensibles sin permisos
-    const sensitiveFields = ['role', 'pendienteAprobacion'];
-    const attemptedSensitiveFields = Object.keys(updateData).filter(field => 
-      sensitiveFields.includes(field)
-    );
-    
-    if (attemptedSensitiveFields.length > 0 && userId !== requesterId) {
-      throw Boom.forbidden('No tienes permisos para modificar campos sensibles');
+    // Validar rol permitido
+    if (!['cliente', 'admin_centro'].includes(userData.role)) {
+      throw Boom.badRequest('Rol no permitido');
     }
   }
 
   async verifyAdminPermissions(userId, requiredRole) {
     const user = await this.userRepository.findById(userId);
-    
-    if (!user || 
-        (requiredRole === 'super_admin' && user.role !== 'super_admin') ||
-        (requiredRole === 'admin' && !['super_admin', 'admin_centro'].includes(user.role))) {
+
+    if (!user || user.role !== requiredRole) {
       throw Boom.forbidden(`Se requiere rol ${requiredRole}`);
     }
+
     // Para admins de centro, verificar que estén aprobados
     if (user.role === 'admin_centro' && user.pendienteAprobacion === 'true') {
       throw Boom.forbidden('Administrador pendiente de aprobación');
     }
+
     return true;
   }
-
+  
   async handlePreSignUp(data) {
     const { clientId, email } = data;
     const domain = email.split('@')[1];
