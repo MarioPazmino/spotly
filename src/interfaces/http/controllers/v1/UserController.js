@@ -89,29 +89,5 @@ exports.approveAdminCenter = async (req, res, next) => {
   }
 };
 
-exports.preSignUp = async (req, res, next) => {
-  try {
-    const result = await UserService.handlePreSignUp(req.body);
-    return res.status(200).json(result);
-  } catch (error) {
-    next(error);
-  }
-};
-
-exports.postConfirmation = async (req, res, next) => {
-  try {
-    const result = await UserService.handlePostConfirmation(req.body);
-    return res.status(200).json(result);
-  } catch (error) {
-    next(error);
-  }
-};
-
-exports.postAuthentication = async (req, res, next) => {
-  try {
-    const result = await UserService.handlePostAuthentication(req.body);
-    return res.status(200).json(result);
-  } catch (error) {
-    next(error);
-  }
-};
+// Los métodos de triggers de Cognito han sido movidos a funciones Lambda independientes
+// definidas en src/cognito/

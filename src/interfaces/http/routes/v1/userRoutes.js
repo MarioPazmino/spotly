@@ -10,7 +10,7 @@ const { checkPermission } = require('../../../middlewares/authorization');
 const auth = authenticate.authenticate();
 
 // Rutas públicas
-router.post('/', UserController.createUser); // Registro de usuarios (cliente o admin_centro)
+// router.post('/', UserController.createUser); // Registro de usuarios (cliente o admin_centro)
 
 // Rutas protegidas
 router.get('/:userId', auth, UserController.getUserById); // Obtener usuario por ID
@@ -21,9 +21,5 @@ router.delete('/:userId', auth, checkPermission('delete:user'), UserController.d
 router.get('/pendientes', auth, checkPermission('approve:admin_centro'), UserController.listPendingAdmins); // Listar admins pendientes
 router.post('/aprobar/:userId', auth, checkPermission('approve:admin_centro'), UserController.approveAdminCenter); // Aprobar admin_centro
 
-// Rutas de autenticación y autorización de Cognito
-router.post('/pre-signup', UserController.preSignUp);
-router.post('/post-confirmation', UserController.postConfirmation);
-router.post('/post-authentication', UserController.postAuthentication);
 
 module.exports = router;
