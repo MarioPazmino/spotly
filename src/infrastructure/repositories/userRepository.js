@@ -115,6 +115,22 @@ class UserRepository {
       throw error;
     }
   }
+
+  async delete(userId) {
+    const params = {
+      TableName: this.USUARIOS_TABLE,
+      Key: { userId },
+      ReturnValues: 'ALL_OLD'
+    };
+    
+    try {
+      const result = await this.dynamoDB.delete(params).promise();
+      return result.Attributes || { userId, deleted: true };
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      throw error;
+    }
+  }
 }
 
-module.exports = new UserRepository();
+module.exports = UserRepository;
