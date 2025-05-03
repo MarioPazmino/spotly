@@ -48,26 +48,115 @@ exports.deleteCentro = async (req, res, next) => {
 };
 
 // Listar centros deportivos
+// Listar centros deportivos con filtros avanzados
 exports.listCentros = async (req, res, next) => {
   try {
-    // Extraer parámetros de consulta
+    // Extraer parámetros de consulta para paginación y ordenamiento
     const {
       page = 1,
       limit = 10,
       sort = 'nombre',
       order = 'asc',
-      nombre,
-      estado,
-      servicios,
-      userId
     } = req.query;
 
-    // Construir opciones de filtrado
+    // Configurar opciones de paginación y ordenamiento
+    const options = {
+      page: parseInt(page, 10),
+      limit: parseInt(limit, 10),
+      sort,
+      order
+    };
+
+    // Extraer todos los posibles filtros de la query
     const filters = {};
-    if (nombre) filters.nombre = nombre;
-    if (estado) filters.estado = estado;
-    if (servicios) filters.servicios = servicios.split(',');
-    if (userId) filters.userId = userId;
+    
+    // Filtros básicos
+    if (req.query.nombre) filters.nombre = req.query.nombre;
+    if (req.query.estado) filters.estado = req.query.estado;
+    if (req.query.userId) filters.userId = req.query.userId;
+    if (req.query.cedulaJuridica) filters.cedulaJuridica = req.query.cedulaJuridica;
+    
+    // Filtros de horario
+    if (req.query.horarioApertura) filters.horarioApertura = req.query.horarioApertura;
+    if (req.query.horarioCierre) filters.horarioCierre = req.query.horarioCierre;
+    
+    // Filtro de servicios (array)
+    if (req.query.servicios) {
+      filters.servicios = req.query.servicios.split(',');
+    }
+    
+    // Filtro por rangos de horario (custom)
+    if (req.query.abiertoDespuesDe) {
+      filters.abiertoDespuesDe = req.query.abiertoDespuesDe;
+    }
+    if (req.query.abiertoAntesDe) {
+      filters.abiertoAntesDe = req.query.abiertoAntesDe;
+    }
+    
+    // Filtros de estado de Braintree
+    if (req.query.braintreeStatus) filters.braintreeStatus = req.query.braintreeStatus;
+    
+    // Llamar al servicio con los filtros extraídos
+    const result = await centroDeportivoService.listCentros(filters, options);
+    return res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// NUEVO MÉTODO: Buscar centros deportivos por ubicación geográfica
+exports.findCentrosByLocation = async (req, res, next) => {
+  try {
+    // Extraer parámetros de ubicación
+    const { lat, lng, radius = 5 } = req.query;
+    
+    // Validar que se proporcionaron coordenadas
+    if (!lat || !lng) {
+      throw Boom.badRequest('Se requieren las coordenadas de latitud (lat) y longitud (lng)');
+    }
+    
+    // Construir objeto de coordenadas
+    const coordinates = {
+      lat: parseFloat(lat),
+      lng: parseFloat(lng)
+    };
+    
+    // Extraer parámetros de filtrado y paginación
+    const {
+      page = 1,
+      limit = 10,
+      sort = 'distance', // Por defecto ordenamos por distancia
+      order = 'asc',     // Ascendente (más cercano primero)
+    } = req.query;
+
+    // Construir opciones de filtrado (mismo proceso que en listCentros)
+    const filters = {};
+    
+    // Filtros básicos
+    if (req.query.nombre) filters.nombre = req.query.nombre;
+    if (req.query.estado) filters.estado = req.query.estado;
+    if (req.query.userId) filters.userId = req.query.userId;
+    if (req.query.cedulaJuridica) filters.cedulaJuridica = req.query.cedulaJuridica;
+    
+    // Filtros de horario
+    if (req.query.horarioApertura) filters.horarioApertura = req.query.horarioApertura;
+    if (req.query.horarioCierre) filters.horarioCierre = req.query.horarioCierre;
+    
+    // Filtro de servicios (array)
+    if (req.query.servicios) {
+      filters.servicios = req.query.servicios.split(',');
+    }
+    
+    // Filtro por rangos de horario (custom)
+    if (req.query.abiertoDespuesDe) {
+      filters.abiertoDespuesDe = req.query.abiertoDespuesDe;
+    }
+    if (req.query.abiertoAntesDe) {
+      filters.abiertoAntesDe = req.query.abiertoAntesDe;
+    }
+    
+    // Filtros de estado de Braintree
+    if (req.query.braintreeStatus) filters.braintreeStatus = req.query.braintreeStatus;
 
     // Opciones de paginación y ordenamiento
     const options = {
@@ -77,9 +166,22 @@ exports.listCentros = async (req, res, next) => {
       order
     };
 
-    // Llamar al servicio
-    const result = await centroDeportivoService.listCentros(filters, options);
-    return res.status(200).json(result);
+    // Llamar al servicio con radio en kilómetros
+    const result = await centroDeportivoService.findCentrosByLocation(
+      coordinates, 
+      parseFloat(radius),
+      filters,
+      options
+    );
+    // Incluir el campo distance en cada centro (si existe)
+    const response = {
+      ...result,
+      items: result.items.map(centro => ({
+        ...centro,
+        distance: centro.distance !== undefined ? centro.distance : null
+      }))
+    };
+    return res.status(200).json(response);
   } catch (error) {
     next(error);
   }

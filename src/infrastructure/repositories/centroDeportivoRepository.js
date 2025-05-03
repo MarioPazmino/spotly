@@ -60,88 +60,130 @@ class CentroDeportivoRepository {
 
   async findAll(filters = {}, options = {}) {
     const { page = 1, limit = 10, sort = 'nombre', order = 'asc' } = options;
-    
-    // Parámetros de consulta base
-    const params = {
-      TableName: this.TABLE_NAME,
-      Limit: limit,
-      ExclusiveStartKey: options.lastEvaluatedKey
-    };
-    
-    // Construir filtros si existen
-    if (Object.keys(filters).length > 0) {
-      let filterExpression = [];
-      let expressionAttributeValues = {};
-      let expressionAttributeNames = {};
-      
-      Object.entries(filters).forEach(([key, value], index) => {
-        // Manejamos arrays (como servicios) y valores simples de manera diferente
-        if (Array.isArray(value)) {
-          // Para arrays hacemos búsqueda de al menos un elemento coincidente
-          filterExpression.push(`contains(#${key}, :${key}${index})`);
-          value.forEach((item, i) => {
-            expressionAttributeValues[`:${key}${index}_${i}`] = item;
-            if (i > 0) {
-              filterExpression.push(`OR contains(#${key}, :${key}${index}_${i})`);
-            }
-          });
-        } else if (typeof value === 'string') {
-          // Para cadenas, hacemos búsqueda con contains para mayor flexibilidad
-          filterExpression.push(`contains(#${key}, :${key}${index})`);
-          expressionAttributeValues[`:${key}${index}`] = value;
-        } else {
-          // Para otros tipos (números, booleanos), hacemos coincidencia exacta
-          filterExpression.push(`#${key} = :${key}${index}`);
-          expressionAttributeValues[`:${key}${index}`] = value;
-        }
-        
-        expressionAttributeNames[`#${key}`] = key;
-      });
-      
-      params.FilterExpression = filterExpression.join(' AND ');
-      params.ExpressionAttributeValues = expressionAttributeValues;
-      params.ExpressionAttributeNames = expressionAttributeNames;
-    }
-    
-    try {
-      const result = await dynamoDB.scan(params).promise();
-      
-      // Transformamos cada item a la entidad CentroDeportivo
-      const items = result.Items.map(item => new CentroDeportivo(item));
-      
-      // Ordenar resultados según parámetros
-      const sortedItems = this._sortItems(items, sort, order);
-      
-      // Construir respuesta paginada
-      return {
-        items: sortedItems,
-        count: result.Count,
-        totalCount: result.ScannedCount,
-        page,
-        limit,
-        lastEvaluatedKey: result.LastEvaluatedKey || null,
-        hasNextPage: !!result.LastEvaluatedKey
+    let lastEvaluatedKey = options.lastEvaluatedKey;
+    let itemsFiltrados = [];
+    let scannedCount = 0;
+    let dynamoLastEvaluatedKey = null;
+    let done = false;
+    // Sobrelectura: múltiplo del límite para cada scan
+    const SCAN_BATCH_SIZE = Math.max(limit * 3, 50);
+
+    while (!done && itemsFiltrados.length < limit) {
+      const params = {
+        TableName: this.TABLE_NAME,
+        Limit: SCAN_BATCH_SIZE,
+        ExclusiveStartKey: lastEvaluatedKey
       };
-    } catch (error) {
-      console.error('Error al listar centros deportivos:', error);
-      throw error;
+      // Construir filtros si existen (solo para los que DynamoDB pueda usar)
+      // (aquí puedes optimizar para query si tienes índices)
+      if (Object.keys(filters).length > 0) {
+        let filterExpression = [];
+        let expressionAttributeValues = {};
+        let expressionAttributeNames = {};
+        Object.entries(filters).forEach(([key, value], index) => {
+          if (value === undefined || value === null) return;
+          if (Array.isArray(value)) {
+            const orExpressions = [];
+            value.forEach((item, i) => {
+              const paramName = `:${key}${index}_${i}`;
+              orExpressions.push(`contains(#${key}, ${paramName})`);
+              expressionAttributeValues[paramName] = item;
+            });
+            if (orExpressions.length > 0) {
+              filterExpression.push(`(${orExpressions.join(' OR ')})`);
+            }
+          } else if (typeof value === 'object' && value !== null) {
+            // Objetos (como ubicacionGPS, redesSociales)
+          } else if (typeof value === 'string') {
+            expressionAttributeValues[`:${key}${index}`] = value;
+            if (key === 'cedulaJuridica' || key === 'userId' || key === 'braintreeMerchantId' || key === 'braintreeStatus') {
+              filterExpression.push(`#${key} = :${key}${index}`);
+            } else {
+              filterExpression.push(`contains(#${key}, :${key}${index})`);
+            }
+            expressionAttributeNames[`#${key}`] = key;
+          } else {
+            filterExpression.push(`#${key} = :${key}${index}`);
+            expressionAttributeValues[`:${key}${index}`] = value;
+            expressionAttributeNames[`#${key}`] = key;
+          }
+        });
+        if (filterExpression.length > 0) {
+          params.FilterExpression = filterExpression.join(' AND ');
+          params.ExpressionAttributeValues = expressionAttributeValues;
+          params.ExpressionAttributeNames = expressionAttributeNames;
+        }
+      }
+      try {
+        const result = await dynamoDB.scan(params).promise();
+        scannedCount += result.ScannedCount || 0;
+        dynamoLastEvaluatedKey = result.LastEvaluatedKey || null;
+        // Transformar a entidad y aplicar filtros en memoria si es necesario
+        const items = result.Items.map(item => new CentroDeportivo(item));
+        // Aquí podrías aplicar filtros en memoria adicionales si los necesitas
+        itemsFiltrados = itemsFiltrados.concat(items);
+        if (!dynamoLastEvaluatedKey) {
+          done = true;
+        } else {
+          lastEvaluatedKey = dynamoLastEvaluatedKey;
+        }
+      } catch (error) {
+        console.error('Error al listar centros deportivos:', error);
+        throw error;
+      }
     }
+    // Ordenar y paginar resultados filtrados
+    const sortedItems = this._sortItems(itemsFiltrados, sort, order).slice(0, limit);
+    const hasNextPage = !!dynamoLastEvaluatedKey && itemsFiltrados.length > limit;
+    return {
+      items: sortedItems,
+      count: sortedItems.length,
+      totalCount: scannedCount,
+      page,
+      limit,
+      lastEvaluatedKey: hasNextPage ? dynamoLastEvaluatedKey : null,
+      hasNextPage
+    };
   }
 
-    // Método auxiliar para ordenar items
-    _sortItems(items, sortField, order) {
-      return items.sort((a, b) => {
-        if (a[sortField] < b[sortField]) {
-          return order === 'asc' ? -1 : 1;
-        }
-        if (a[sortField] > b[sortField]) {
-          return order === 'asc' ? 1 : -1;
-        }
-        return 0;
-      });
+  // Método auxiliar para ordenar items
+  _sortItems(items, sortField, order) {
+    // Verificar si el campo de ordenamiento existe
+    if (!items.length || items[0][sortField] === undefined) {
+      // Si el campo no existe, usamos nombre como fallback
+      sortField = 'nombre';
     }
-
-  // Puedes agregar más métodos como buscar por usuario, listar todos, etc.
+    
+    return items.sort((a, b) => {
+      // Manejar caso especial: ordenar por distancia (para búsquedas por ubicación)
+      if (sortField === 'distance') {
+        const distA = a.distance || Infinity;
+        const distB = b.distance || Infinity;
+        return order === 'asc' ? distA - distB : distB - distA;
+      }
+      
+      // Para el resto de campos
+      if (a[sortField] === undefined && b[sortField] === undefined) return 0;
+      if (a[sortField] === undefined) return order === 'asc' ? 1 : -1;
+      if (b[sortField] === undefined) return order === 'asc' ? -1 : 1;
+      
+      // Ordenamiento específico según tipo de dato
+      if (typeof a[sortField] === 'string') {
+        return order === 'asc' 
+          ? a[sortField].localeCompare(b[sortField]) 
+          : b[sortField].localeCompare(a[sortField]);
+      }
+      
+      // Ordenamiento para números y otros tipos
+      if (a[sortField] < b[sortField]) {
+        return order === 'asc' ? -1 : 1;
+      }
+      if (a[sortField] > b[sortField]) {
+        return order === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+  }
 }
 
 module.exports = CentroDeportivoRepository;

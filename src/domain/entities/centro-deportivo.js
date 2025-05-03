@@ -1,4 +1,4 @@
-//src/domain/entities/centro-deportivo.js
+// src/domain/entities/centro-deportivo.js
 class CentroDeportivo {
   constructor({
     centroId, // Identificador único del centro deportivo
@@ -22,8 +22,6 @@ class CentroDeportivo {
     braintreeStatus, // Estado de la cuenta: 'activa', 'pendiente', 'rechazada'
     // Redes sociales
     redesSociales, // Objeto con enlaces a redes sociales (opcional)
-    // Cupones
-    cupones, // Array de cuponId (referencias a CuponDescuento)
     createdAt, // Fecha de creación del registro
     updatedAt // Fecha de última actualización
   }) {
@@ -48,8 +46,6 @@ class CentroDeportivo {
     this.braintreeStatus = braintreeStatus || 'pendiente'; // Estado inicial
     // Redes sociales
     this.redesSociales = redesSociales || {}; // Objeto vacío por defecto
-    // Cupones
-    this.cupones = cupones || []; // Array vacío por defecto
     this.createdAt = createdAt || new Date().toISOString();
     this.updatedAt = updatedAt || new Date().toISOString();
   }
