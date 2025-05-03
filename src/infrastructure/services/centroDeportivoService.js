@@ -4,10 +4,13 @@ const CentroDeportivo = require('../../domain/entities/centro-deportivo');
 const geoLocationService = require('./geoLocationService');
 const Boom = require('@hapi/boom');
 const { v4: uuidv4 } = require('uuid'); // Necesitarás añadir esta dependencia
+const UserRepository = require('../repositories/userRepository');
+const { sanitizeObject } = require('../../utils/sanitizeInput');
 
 class CentroDeportivoService {
   constructor() {
     this.repo = new CentroDeportivoRepository();
+    this.userRepo = new UserRepository();
   }
 
   async listCentros(filters = {}, options = {}) {
@@ -43,23 +46,36 @@ class CentroDeportivoService {
 
 
   async createCentro(centroData) {
-    // Validar datos necesarios
-    if (!centroData.nombre || !centroData.direccion || !centroData.telefonoPrincipal || !centroData.userId) {
-      throw Boom.badRequest('Faltan campos obligatorios para crear el centro deportivo');
+    // Sanitizar los datos de entrada
+    const cleanData = sanitizeObject(centroData);
+
+    // Validar existencia de usuario (esto sí es lógica de negocio)
+    const user = await this.userRepo.findById(cleanData.userId);
+    if (!user) {
+      throw Boom.badRequest('El usuario asignado (userId) no existe');
     }
 
-    // Validar coordenadas GPS si están presentes
-    if (centroData.ubicacionGPS) {
-      const { error } = geoLocationService.validateCoordinates(centroData.ubicacionGPS);
-      if (error) {
-        throw Boom.badRequest(`Error en coordenadas GPS: ${error.message}`);
-      }
+    // Calcula los campos auxiliares de horario antes de guardar
+    function calcularHorasMinMax(horario) {
+      if (!Array.isArray(horario) || horario.length === 0) return { horaAperturaMinima: null, horaCierreMaxima: null };
+      // Asume formato 'HH:mm' y ordena correctamente
+      const horasApertura = horario.map(h => h.abre).sort();
+      const horasCierre = horario.map(h => h.cierra).sort();
+      return {
+        horaAperturaMinima: horasApertura[0],
+        horaCierreMaxima: horasCierre[horasCierre.length - 1]
+      };
     }
+
+    const horario = cleanData.horario || [];
+    const { horaAperturaMinima, horaCierreMaxima } = calcularHorasMinMax(horario);
+    cleanData.horaAperturaMinima = horaAperturaMinima;
+    cleanData.horaCierreMaxima = horaCierreMaxima;
 
     // Crear un centro deportivo con ID único
     const centro = new CentroDeportivo({
-      ...centroData,
-      centroId: centroData.centroId || uuidv4(),
+      ...cleanData,
+      centroId: cleanData.centroId || uuidv4(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
@@ -77,6 +93,8 @@ class CentroDeportivoService {
   }
 
   async updateCentro(centroId, updateData) {
+    // Sanitizar los datos de entrada
+    const cleanData = sanitizeObject(updateData);
     // Validar formato del ID
     this.validateCentroId(centroId);
     
@@ -87,21 +105,20 @@ class CentroDeportivoService {
     }
 
     // Validar que haya al menos un campo para actualizar
-    if (Object.keys(updateData).length === 0) {
+    if (Object.keys(cleanData).length === 0) {
       throw Boom.badRequest('Debe proporcionar al menos un campo para actualizar');
     }
     
-    // Validar coordenadas GPS si están presentes
-    if (updateData.ubicacionGPS) {
-      const { error } = geoLocationService.validateCoordinates(updateData.ubicacionGPS);
-      if (error) {
-        throw Boom.badRequest(`Error en coordenadas GPS: ${error.message}`);
-      }
+    // Calcula los campos auxiliares de horario antes de actualizar
+    if (cleanData.horario) {
+      const { horaAperturaMinima, horaCierreMaxima } = calcularHorasMinMax(cleanData.horario);
+      cleanData.horaAperturaMinima = horaAperturaMinima;
+      cleanData.horaCierreMaxima = horaCierreMaxima;
     }
-    
+
     // Añadir marca de tiempo de actualización
     const dataToUpdate = {
-      ...updateData,
+      ...cleanData,
       updatedAt: new Date().toISOString()
     };
     
@@ -136,70 +153,70 @@ class CentroDeportivoService {
     }
   }
 
-  // Validar propiedad del centro deportivo
-  async validateOwnership(centroId, userId) {
-    const centro = await this.getCentroById(centroId);
-    if (centro.userId !== userId) {
-      throw Boom.forbidden('No tienes permisos para modificar este centro deportivo');
-    }
-    return centro;
-  }
-
   // NUEVO MÉTODO: Buscar centros cercanos por ubicación GPS
-async findCentrosByLocation(coordinates, radius = 5, filters = {}, options = {}) {
-  // Validar coordenadas
-  const { error } = geoLocationService.validateCoordinates(coordinates);
-  if (error) {
-    throw Boom.badRequest(`Error en coordenadas GPS: ${error.message}`);
-  }
-  
-  // Validar radio
-  if (isNaN(radius) || radius <= 0 || radius > 100) {
-    throw Boom.badRequest('El radio debe ser un número positivo entre 1 y 100 kilómetros');
-  }
-  
-  // Procesar filtros especiales antes de pasarlos al repositorio
-  const processedFilters = { ...filters };
-  
-  // Manejar filtros de rango de horario
-  if (filters.abiertoDespuesDe || filters.abiertoAntesDe) {
-    // Eliminar estos filtros del objeto ya que se manejarán de manera especial
-    if (processedFilters.abiertoDespuesDe) delete processedFilters.abiertoDespuesDe;
-    if (processedFilters.abiertoAntesDe) delete processedFilters.abiertoAntesDe;
-  }
-  
-  // Obtener todos los centros con filtros básicos
-  const result = await this.repo.findAll(processedFilters, options);
-  
-  // Aplicar filtros especiales post-consulta si existen
-  let filteredItems = result.items;
-  
-  // Filtrar por horario de apertura/cierre (rangos)
-  if (filters.abiertoDespuesDe || filters.abiertoAntesDe) {
-    filteredItems = this._filterByHorario(
-      filteredItems, 
-      filters.abiertoDespuesDe, 
-      filters.abiertoAntesDe
-    );
-  }
-  
-  // Filtrar por distancia y añadir la distancia a cada centro
-  const centrosCercanos = geoLocationService.filterByDistance(
-    filteredItems, 
-    coordinates, 
-    radius
-  );
-  
-  // Actualizar la respuesta paginada
-  return {
-    ...result,
-    items: centrosCercanos,
-    count: centrosCercanos.length
-  };
-}
+  async findCentrosByLocation(coordinates, radius = 5, filters = {}, options = {}) {
+    // Validar coordenadas
+    const { error } = geoLocationService.validateCoordinates(coordinates);
+    if (error) {
+      throw Boom.badRequest(`Error en coordenadas GPS: ${error.message}`);
+    }
+    if (isNaN(radius) || radius <= 0 || radius > 100) {
+      throw Boom.badRequest('El radio debe ser un número positivo entre 1 y 100 kilómetros');
+    }
 
-   // Método auxiliar para filtrar por rangos de horario
-   _filterByHorario(centros, abiertoDespuesDe, abiertoAntesDe) {
+    // 1. Calcular bounding box
+    const bbox = geoLocationService.calculateBoundingBox(coordinates, radius);
+
+    // 2. Agregar filtro de bounding box a los filtros existentes
+    const processedFilters = { ...filters };
+    processedFilters._boundingBox = bbox;
+
+    // Manejar filtros de rango de horario
+    if (filters.abiertoDespuesDe || filters.abiertoAntesDe) {
+      if (processedFilters.abiertoDespuesDe) delete processedFilters.abiertoDespuesDe;
+      if (processedFilters.abiertoAntesDe) delete processedFilters.abiertoAntesDe;
+    }
+
+    // 3. Obtener todos los centros con filtros básicos
+    const result = await this.repo.findAll(processedFilters, options);
+
+    // 4. Filtrar por horario de apertura/cierre (rangos)
+    let filteredItems = result.items;
+    
+    // Filtrar por horario de apertura/cierre (rangos)
+    if (filters.abiertoDespuesDe || filters.abiertoAntesDe) {
+      filteredItems = this._filterByHorario(
+        filteredItems, 
+        filters.abiertoDespuesDe, 
+        filters.abiertoAntesDe
+      );
+    }
+    
+    // 5. Filtrar por bounding box en memoria (si no se puede en DynamoDB)
+    filteredItems = filteredItems.filter(item => {
+      if (!item.ubicacionGPS) return false;
+      const lat = item.ubicacionGPS.lat;
+      const lng = item.ubicacionGPS.lng;
+      return lat >= bbox.minLat && lat <= bbox.maxLat && lng >= bbox.minLng && lng <= bbox.maxLng;
+    });
+
+    // 6. Filtrar por distancia precisa y añadir la distancia a cada centro
+    const centrosCercanos = geoLocationService.filterByDistance(
+      filteredItems,
+      coordinates,
+      radius
+    );
+
+    // Actualizar la respuesta paginada
+    return {
+      ...result,
+      items: centrosCercanos,
+      count: centrosCercanos.length
+    };
+  }
+
+  // Método auxiliar para filtrar por rangos de horario
+  _filterByHorario(centros, abiertoDespuesDe, abiertoAntesDe) {
     return centros.filter(centro => {
       // Convertir horarios a minutos desde medianoche para comparar
       const convertToMinutes = (timeStr) => {
@@ -208,8 +225,8 @@ async findCentrosByLocation(coordinates, radius = 5, filters = {}, options = {})
         return hours * 60 + minutes;
       };
       
-      const centroAperturaMinutos = convertToMinutes(centro.horarioApertura);
-      const centroCierreMinutos = convertToMinutes(centro.horarioCierre);
+      const centroAperturaMinutos = convertToMinutes(centro.horaAperturaMinima);
+      const centroCierreMinutos = convertToMinutes(centro.horaCierreMaxima);
       const despuesDeMinutos = convertToMinutes(abiertoDespuesDe);
       const antesDeMinutos = convertToMinutes(abiertoAntesDe);
       
@@ -227,6 +244,18 @@ async findCentrosByLocation(coordinates, radius = 5, filters = {}, options = {})
       return cumpleHorario;
     });
   }
+}
+
+// Función auxiliar para calcular los campos auxiliares de horario
+function calcularHorasMinMax(horario) {
+  if (!Array.isArray(horario) || horario.length === 0) return { horaAperturaMinima: null, horaCierreMaxima: null };
+  // Asume formato 'HH:mm' y ordena correctamente
+  const horasApertura = horario.map(h => h.abre).sort();
+  const horasCierre = horario.map(h => h.cierra).sort();
+  return {
+    horaAperturaMinima: horasApertura[0],
+    horaCierreMaxima: horasCierre[horasCierre.length - 1]
+  };
 }
 
 module.exports = new CentroDeportivoService();

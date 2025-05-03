@@ -7,8 +7,7 @@ class CentroDeportivo {
     telefonoPrincipal, // Número de contacto principal
     telefonoSecundario, // Número de contacto secundario (opcional)
     userId, // ID del usuario administrador (FK)
-    horarioApertura, // Hora de inicio (formato HH:MM)
-    horarioCierre, // Hora de cierre (formato HH:MM)
+    horario, // Horario flexible por día (array de objetos)
     ubicacionGPS, // Coordenadas para mapas {lat, lng}
     imagenes, // Array de URLs de imágenes
     servicios, // Lista de servicios adicionales
@@ -22,6 +21,8 @@ class CentroDeportivo {
     braintreeStatus, // Estado de la cuenta: 'activa', 'pendiente', 'rechazada'
     // Redes sociales
     redesSociales, // Objeto con enlaces a redes sociales (opcional)
+    horaAperturaMinima, // Hora de apertura mínima (formato HH:MM)
+    horaCierreMaxima, // Hora de cierre máxima (formato HH:MM)
     createdAt, // Fecha de creación del registro
     updatedAt // Fecha de última actualización
   }) {
@@ -30,20 +31,34 @@ class CentroDeportivo {
     this.direccion = direccion;
     this.telefonoPrincipal = telefonoPrincipal;
     this.telefonoSecundario = telefonoSecundario || null; // Opcional, null por defecto
+    // --- NUEVOS CAMPOS AUXILIARES PARA FILTRO DE HORARIO ---
+    this.horaAperturaMinima = horaAperturaMinima || null;
+    this.horaCierreMaxima = horaCierreMaxima || null;
     this.userId = userId;
-    this.horarioApertura = horarioApertura || '08:00'; // Horario predeterminado
-    this.horarioCierre = horarioCierre || '22:00'; // Horario predeterminado
+    // --- HORARIO FLEXIBLE POR DÍA ---
+    this.horario = horario || [];
     this.ubicacionGPS = ubicacionGPS || { lat: 0, lng: 0 }; // Coordenadas por defecto
     this.imagenes = imagenes || []; // Array vacío por defecto
-    this.servicios = servicios || []; // Array vacío por defecto
     this.estado = estado || 'abierto'; // Por defecto está abierto
     // Cuentas bancarias
     this.bancos = bancos || []; // Array vacío por defecto
     this.cedulaJuridica = cedulaJuridica || null; // RUC del centro
-    // Braintree
+
+    // Validación de dependencias Braintree
+    if (braintreeAccountId && !braintreeMerchantId) {
+      throw new Error('No se puede asignar braintreeAccountId sin un braintreeMerchantId asociado');
+    }
     this.braintreeMerchantId = braintreeMerchantId || null; // Nulo si no está vinculada
     this.braintreeAccountId = braintreeAccountId || null; // Opcional
     this.braintreeStatus = braintreeStatus || 'pendiente'; // Estado inicial
+
+    // Validar y limpiar servicios (sin duplicados, solo strings, sin espacios extra)
+    if (Array.isArray(servicios)) {
+      this.servicios = [...new Set(servicios.map(s => typeof s === 'string' ? s.trim().toLowerCase() : ''))].filter(Boolean);
+    } else {
+      this.servicios = [];
+    }
+
     // Redes sociales
     this.redesSociales = redesSociales || {}; // Objeto vacío por defecto
     this.createdAt = createdAt || new Date().toISOString();

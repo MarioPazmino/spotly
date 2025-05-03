@@ -58,91 +58,107 @@ class CentroDeportivoRepository {
     return { centroId, deleted: true };
   }
 
+  /**
+   * Busca centros deportivos con filtros SOLO sobre campos indexados.
+   * Filtros soportados:
+   *   - userId (requiere índice UserIdEstadoIndex)
+   *   - estado (requiere índice UserIdEstadoIndex)
+   *   - userId + estado (requiere índice UserIdEstadoIndex)
+   *   - nombre (requiere índice NombreIndex)
+   *   - horaAperturaMinima (requiere índice HoraAperturaMinimaIndex)
+   *   - horaCierreMaxima (requiere índice HoraCierreMaximaIndex)
+   *
+   * @param {Object} filters - Filtros válidos: userId, estado, nombre, abiertoDespuesDe, abiertoAntesDe
+   * @param {Object} options - Opciones de paginación y ordenamiento
+   */
   async findAll(filters = {}, options = {}) {
-    const { page = 1, limit = 10, sort = 'nombre', order = 'asc' } = options;
+    const { limit = 10, sort = 'nombre', order = 'asc' } = options;
     let lastEvaluatedKey = options.lastEvaluatedKey;
     let itemsFiltrados = [];
     let scannedCount = 0;
     let dynamoLastEvaluatedKey = null;
     let done = false;
-    // Sobrelectura: múltiplo del límite para cada scan
-    const SCAN_BATCH_SIZE = Math.max(limit * 3, 50);
+    const SCAN_BATCH_SIZE = limit; // Para paginación eficiente, igual al limit solicitado
 
-    while (!done && itemsFiltrados.length < limit) {
-      const params = {
+    // Solo se permiten filtros sobre campos indexados
+    const canQueryByUserId = filters.userId && !filters.estado && !filters.nombre && !filters.abiertoDespuesDe && !filters.abiertoAntesDe;
+    const canQueryByUserIdEstado = filters.userId && filters.estado && !filters.nombre && !filters.abiertoDespuesDe && !filters.abiertoAntesDe;
+    const canQueryByEstado = filters.estado && !filters.userId && !filters.nombre && !filters.abiertoDespuesDe && !filters.abiertoAntesDe;
+    const canQueryByNombre = filters.nombre && !filters.userId && !filters.estado && !filters.abiertoDespuesDe && !filters.abiertoAntesDe;
+    const canQueryByApertura = filters.abiertoDespuesDe && !filters.userId && !filters.estado && !filters.nombre && !filters.abiertoAntesDe;
+    const canQueryByCierre = filters.abiertoAntesDe && !filters.userId && !filters.estado && !filters.nombre && !filters.abiertoDespuesDe;
+
+    if (canQueryByUserId || canQueryByUserIdEstado || canQueryByEstado || canQueryByNombre || canQueryByApertura || canQueryByCierre) {
+      // Construir parámetros para query
+      let params = {
         TableName: this.TABLE_NAME,
         Limit: SCAN_BATCH_SIZE,
         ExclusiveStartKey: lastEvaluatedKey
       };
-      // Construir filtros si existen (solo para los que DynamoDB pueda usar)
-      // (aquí puedes optimizar para query si tienes índices)
-      if (Object.keys(filters).length > 0) {
-        let filterExpression = [];
-        let expressionAttributeValues = {};
-        let expressionAttributeNames = {};
-        Object.entries(filters).forEach(([key, value], index) => {
-          if (value === undefined || value === null) return;
-          if (Array.isArray(value)) {
-            const orExpressions = [];
-            value.forEach((item, i) => {
-              const paramName = `:${key}${index}_${i}`;
-              orExpressions.push(`contains(#${key}, ${paramName})`);
-              expressionAttributeValues[paramName] = item;
-            });
-            if (orExpressions.length > 0) {
-              filterExpression.push(`(${orExpressions.join(' OR ')})`);
-            }
-          } else if (typeof value === 'object' && value !== null) {
-            // Objetos (como ubicacionGPS, redesSociales)
-          } else if (typeof value === 'string') {
-            expressionAttributeValues[`:${key}${index}`] = value;
-            if (key === 'cedulaJuridica' || key === 'userId' || key === 'braintreeMerchantId' || key === 'braintreeStatus') {
-              filterExpression.push(`#${key} = :${key}${index}`);
-            } else {
-              filterExpression.push(`contains(#${key}, :${key}${index})`);
-            }
-            expressionAttributeNames[`#${key}`] = key;
-          } else {
-            filterExpression.push(`#${key} = :${key}${index}`);
-            expressionAttributeValues[`:${key}${index}`] = value;
-            expressionAttributeNames[`#${key}`] = key;
-          }
-        });
-        if (filterExpression.length > 0) {
-          params.FilterExpression = filterExpression.join(' AND ');
-          params.ExpressionAttributeValues = expressionAttributeValues;
-          params.ExpressionAttributeNames = expressionAttributeNames;
-        }
+      if (canQueryByUserIdEstado) {
+        params.IndexName = 'UserIdEstadoIndex';
+        params.KeyConditionExpression = 'userId = :userId AND estado = :estado';
+        params.ExpressionAttributeValues = {
+          ':userId': filters.userId,
+          ':estado': filters.estado
+        };
+      } else if (canQueryByUserId) {
+        params.IndexName = 'UserIdEstadoIndex';
+        params.KeyConditionExpression = 'userId = :userId';
+        params.ExpressionAttributeValues = {
+          ':userId': filters.userId
+        };
+      } else if (canQueryByEstado) {
+        params.IndexName = 'UserIdEstadoIndex';
+        params.KeyConditionExpression = 'estado = :estado';
+        params.ExpressionAttributeValues = {
+          ':estado': filters.estado
+        };
+      } else if (canQueryByNombre) {
+        params.IndexName = 'NombreIndex';
+        params.KeyConditionExpression = 'nombre = :nombre';
+        params.ExpressionAttributeValues = {
+          ':nombre': filters.nombre
+        };
+      } else if (canQueryByApertura) {
+        params.IndexName = 'HoraAperturaMinimaIndex';
+        params.KeyConditionExpression = 'horaAperturaMinima <= :abiertoDespuesDe';
+        params.ExpressionAttributeValues = {
+          ':abiertoDespuesDe': filters.abiertoDespuesDe
+        };
+      } else if (canQueryByCierre) {
+        params.IndexName = 'HoraCierreMaximaIndex';
+        params.KeyConditionExpression = 'horaCierreMaxima >= :abiertoAntesDe';
+        params.ExpressionAttributeValues = {
+          ':abiertoAntesDe': filters.abiertoAntesDe
+        };
       }
+
       try {
-        const result = await dynamoDB.scan(params).promise();
+        const result = await dynamoDB.query(params).promise();
         scannedCount += result.ScannedCount || 0;
         dynamoLastEvaluatedKey = result.LastEvaluatedKey || null;
-        // Transformar a entidad y aplicar filtros en memoria si es necesario
         const items = result.Items.map(item => new CentroDeportivo(item));
-        // Aquí podrías aplicar filtros en memoria adicionales si los necesitas
-        itemsFiltrados = itemsFiltrados.concat(items);
-        if (!dynamoLastEvaluatedKey) {
-          done = true;
-        } else {
-          lastEvaluatedKey = dynamoLastEvaluatedKey;
-        }
+        let itemsFiltradosBatch = items;
+        itemsFiltrados = itemsFiltrados.concat(itemsFiltradosBatch);
+        done = true;
       } catch (error) {
-        console.error('Error al listar centros deportivos:', error);
+        console.error('Error en query de centros deportivos:', error);
         throw error;
       }
+    } else {
+      // Si no hay filtros válidos, lanzar error y documentar
+      throw new Error('Solo se permiten filtros sobre campos indexados: userId, estado, userId+estado, nombre, horaAperturaMinima, horaCierreMaxima. Otros filtros no están soportados por eficiencia.');
     }
-    // Ordenar y paginar resultados filtrados
-    const sortedItems = this._sortItems(itemsFiltrados, sort, order).slice(0, limit);
-    const hasNextPage = !!dynamoLastEvaluatedKey && itemsFiltrados.length > limit;
+
+    // Ordenar resultados
+    itemsFiltrados = this._sortItems(itemsFiltrados, sort, order);
+
     return {
-      items: sortedItems,
-      count: sortedItems.length,
-      totalCount: scannedCount,
-      page,
-      limit,
-      lastEvaluatedKey: hasNextPage ? dynamoLastEvaluatedKey : null,
-      hasNextPage
+      items: itemsFiltrados,
+      count: itemsFiltrados.length,
+      scannedCount,
+      lastEvaluatedKey: dynamoLastEvaluatedKey
     };
   }
 

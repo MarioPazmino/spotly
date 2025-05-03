@@ -51,6 +51,8 @@ provider:
             - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/*"]]
             - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/index/UserIdIndex"]]
             - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/index/CedulaJuridicaIndex"]]
+            - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/index/HoraAperturaMinimaIndex"]]
+            - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/index/HoraCierreMaximaIndex"]]
             # Recursos para tabla Canchas
             - !GetAtt CanchasTable.Arn
             - !Join ["", [!GetAtt CanchasTable.Arn, "/*"]]
@@ -183,6 +185,10 @@ resources:
             AttributeType: S
           - AttributeName: cedulaJuridica
             AttributeType: S
+          - AttributeName: horaAperturaMinima
+            AttributeType: S
+          - AttributeName: horaCierreMaxima
+            AttributeType: S
         KeySchema:
           - AttributeName: centroId
             KeyType: HASH
@@ -196,6 +202,18 @@ resources:
           - IndexName: CedulaJuridicaIndex
             KeySchema:
               - AttributeName: cedulaJuridica
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: HoraAperturaMinimaIndex
+            KeySchema:
+              - AttributeName: horaAperturaMinima
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: HoraCierreMaximaIndex
+            KeySchema:
+              - AttributeName: horaCierreMaxima
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
@@ -484,6 +502,34 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
+    # === S3 para imágenes de centros deportivos ===
+    ImagenesCentrosDeportivosBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: spotly-centros-imagenes-${self:custom.stage}
+        CorsConfiguration:
+          CorsRules:
+            - AllowedOrigins:
+                - '*'
+              AllowedHeaders:
+                - '*'
+              AllowedMethods:
+                - GET
+                - PUT
+                - POST
+                - DELETE
+              MaxAge: 3000
+    ImagenesCentrosDeportivosBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref ImagenesCentrosDeportivosBucket
+        PolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: '*'
+              Action:
+                - s3:GetObject
+              Resource: !Join ['', ['arn:aws:s3:::', !Ref ImagenesCentrosDeportivosBucket, '/*']]
     #======================================================================================#
     #====================================COGNITO==========================================#
     #======================================================================================#

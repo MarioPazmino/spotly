@@ -5,28 +5,10 @@ const CentroDeportivoController = require('../../controllers/v1/CentroDeportivoC
 const auth = require('../../../middlewares/CognitoAuthMiddleware').authenticate();
 const { validateCentro, validateLocationSearch, validateCentroQuery } = require('../../../middlewares/validateCentroDeportivo');
 const Authorization = require('../../../middlewares/authorization');
-const Boom = require('@hapi/boom');
-const centroDeportivoService = require('../../../../infrastructure/services/centroDeportivoService');
-
-// Middleware para verificar propiedad del centro deportivo
-const checkCentroOwnership = async (req, res, next) => {
-  try {
-    // Solo verificar propiedad si el usuario es admin_centro (super_admin tiene permiso universal)
-    if (req.user.groups.includes('admin_centro') && !req.user.groups.includes('super_admin')) {
-      const centro = await centroDeportivoService.getCentroById(req.params.centroId);
-      
-      if (centro.userId !== req.user.sub) {
-        throw Boom.forbidden('No tienes permisos para modificar este centro deportivo');
-      }
-      
-      // Guardamos el centro ya obtenido para evitar consultas duplicadas
-      req.centro = centro;
-    }
-    next();
-  } catch (error) {
-    next(error);
-  }
-};
+const ImagenCentroController = require('../../controllers/v1/ImagenCentroController');
+const multer = require('multer');
+const upload = multer(); // memoria, no disco
+const checkCentroOwnership = require('../../../middlewares/checkCentroOwnership');
 
 // Listar centros deportivos (acceso público o autenticado)
 router.get('/centros', auth, validateCentroQuery, CentroDeportivoController.listCentros);
@@ -93,6 +75,23 @@ router.delete('/centros/:centroId',
       next(error);
     }
   }
+);
+
+// --- Subida de imágenes para centros deportivos ---
+// Subir imágenes (archivos y/o URLs) a un centro deportivo
+router.post('/centros/:centroId/imagenes',
+  auth,
+  checkCentroOwnership,
+  (req, res, next) => {
+    try {
+      Authorization.checkPermission('write:centro')(req.user.groups);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  },
+  upload.array('imagenes', 3),
+  ImagenCentroController.uploadImagenes
 );
 
 module.exports = router;

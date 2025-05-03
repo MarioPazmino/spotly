@@ -46,6 +46,16 @@ class GeoLocationService {
   }
   
   /**
+   * Convierte radianes a grados
+   * 
+   * @param {Number} radians - Radianes
+   * @returns {Number} Grados
+   */
+  toDegrees(radians) {
+    return radians * (180 / Math.PI);
+  }
+  
+  /**
    * Valida que unas coordenadas GPS estén en un rango válido
    * 
    * @param {Object} coordinates - Coordenadas {lat, lng}
@@ -68,6 +78,30 @@ class GeoLocationService {
     });
     
     return schema.validate(coordinates);
+  }
+  
+  /**
+   * Calcula los límites de una bounding box (caja delimitadora) alrededor de un punto dado y radio (en km)
+   * @param {Object} center - {lat, lng}
+   * @param {Number} radiusKm - radio en kilómetros
+   * @returns {Object} { minLat, maxLat, minLng, maxLng }
+   */
+  calculateBoundingBox(center, radiusKm) {
+    const earthRadius = 6371; // km
+    const lat = this.toRadians(center.lat);
+    const lng = this.toRadians(center.lng);
+
+    // Grados de latitud por km
+    const latDelta = radiusKm / earthRadius;
+    // Grados de longitud por km (ajustado por latitud)
+    const lngDelta = radiusKm / (earthRadius * Math.cos(lat));
+
+    const minLat = center.lat - this.toDegrees(latDelta);
+    const maxLat = center.lat + this.toDegrees(latDelta);
+    const minLng = center.lng - this.toDegrees(lngDelta);
+    const maxLng = center.lng + this.toDegrees(lngDelta);
+
+    return { minLat, maxLat, minLng, maxLng };
   }
   
   /**

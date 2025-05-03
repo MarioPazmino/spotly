@@ -18,14 +18,20 @@ const centroDeportivoBaseSchema = {
       'string.pattern.base': 'El teléfono secundario debe estar en formato internacional E.164 (ej: +593989508266)'
     }),
   userId: Joi.string(),
-  horarioApertura: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/)
-    .messages({
-      'string.pattern.base': 'El horario de apertura debe estar en formato HH:mm (00:00 a 23:59)'
-    }),
-  horarioCierre: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/)
-    .messages({
-      'string.pattern.base': 'El horario de cierre debe estar en formato HH:mm (00:00 a 23:59)'
-    }),
+  // --- HORARIO FLEXIBLE POR DÍA ---
+  horario: Joi.array().items(
+    Joi.object({
+      dia: Joi.string().valid('Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo').required(),
+      abre: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/).required()
+        .messages({
+          'string.pattern.base': 'La hora de apertura debe estar en formato HH:mm (00:00 a 23:59)'
+        }),
+      cierra: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/).required()
+        .messages({
+          'string.pattern.base': 'La hora de cierre debe estar en formato HH:mm (00:00 a 23:59)'
+        })
+    })
+  ),
   ubicacionGPS: Joi.object({
     lat: Joi.number().min(-90).max(90).required()
       .messages({
@@ -98,20 +104,6 @@ const centroDeportivoBaseSchema = {
   updatedAt: Joi.date().iso()
 };
 
-// Validación adicional: horarioApertura < horarioCierre
-function validateHorarioAperturaCierre(value, helpers) {
-  if (value.horarioApertura && value.horarioCierre) {
-    const [haH, haM] = value.horarioApertura.split(':').map(Number);
-    const [hcH, hcM] = value.horarioCierre.split(':').map(Number);
-    const apertura = haH * 60 + haM;
-    const cierre = hcH * 60 + hcM;
-    if (apertura >= cierre) {
-      return helpers.error('any.invalid', { message: 'El horario de apertura debe ser menor al de cierre' });
-    }
-  }
-  return value;
-}
-
 // Esquemas específicos para creación y actualización
 const createSchema = Joi.object({
   ...centroDeportivoBaseSchema,
@@ -119,11 +111,11 @@ const createSchema = Joi.object({
   direccion: Joi.string().required(),
   telefonoPrincipal: Joi.string().required(),
   userId: Joi.string().required()
-}).custom(validateHorarioAperturaCierre);
+});
 
 const updateSchema = Joi.object({
   ...centroDeportivoBaseSchema
-}).min(1).custom(validateHorarioAperturaCierre).messages({
+}).min(1).messages({
   'object.min': 'Debe proporcionar al menos un campo para actualizar'
 });
 
@@ -167,14 +159,23 @@ const centroDeportivoQuerySchema = Joi.object({
     }
     return value;
   }, 'Validación de servicios').messages({
-    'any.invalid': `Todos los servicios deben ser uno de: ${SERVICIOS_VALIDOS.join(', ')}`
+    'any.invalid': `El servicio debe ser uno de: ${SERVICIOS_VALIDOS.join(', ')}`
   }),
   userId: Joi.string(),
   cedulaJuridica: Joi.string(),
-  horarioApertura: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/),
-  horarioCierre: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/),
-  abiertoDespuesDe: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/),
-  abiertoAntesDe: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/),
+  horario: Joi.array().items(
+    Joi.object({
+      dia: Joi.string().valid('Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo').required(),
+      abre: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/).required()
+        .messages({
+          'string.pattern.base': 'La hora de apertura debe estar en formato HH:mm (00:00 a 23:59)'
+        }),
+      cierra: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/).required()
+        .messages({
+          'string.pattern.base': 'La hora de cierre debe estar en formato HH:mm (00:00 a 23:59)'
+        })
+    })
+  ),
   braintreeStatus: Joi.string().valid('activa', 'pendiente', 'rechazada'),
   'ubicacionGPS.lat': Joi.number().min(-90).max(90),
   'ubicacionGPS.lng': Joi.number().min(-180).max(180),
