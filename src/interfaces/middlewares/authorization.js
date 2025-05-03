@@ -6,14 +6,17 @@ class AuthorizationMiddleware {
     this.groupPermissions = {
       "super_admin": ["*"],
       "admin_centro": [
-        "read:centro", "write:centro", "update:centro", "delete:centro",
+        "list:centro", "read:centro", "write:centro", "update:centro", "delete:centro",
         "read:canchas", "write:canchas", "update:canchas", "delete:canchas",
         "read:horarios", "write:horarios", "update:horarios", "delete:horarios",
-        "read:reservas", "update:reservas", "cancel:reservas"
+        "read:reservas", "update:reservas", "cancel:reservas",
+        "read:cupon", "write:cupon", "update:cupon", "delete:cupon"
       ],
       "cliente": [
+        "list:centro", "read:centro",
         "read:public", "write:reservas", "cancel:propias",
-        "update:perfil", "read:pagos_propios", "create:pagos"
+        "update:perfil", "read:pagos_propios", "create:pagos",
+        "read:cupon"
       ]
     };
   }
