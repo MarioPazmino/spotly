@@ -13,6 +13,11 @@ class CentroDeportivo {
     imagenes, // Array de URLs de imágenes
     servicios, // Lista de servicios adicionales
     estado, // Estado operativo: 'abierto', 'cerrado', etc.
+
+    braintreeMerchantId, // ID de la cuenta de Braintree del admin_centro
+    braintreeAccountId, // ID de la cuenta bancaria en Braintree (opcional)
+    braintreeStatus, // Estado de la cuenta: 'activa', 'pendiente', 'rechazada'
+
     redesSociales, // Objeto con enlaces a redes sociales (opcional)
     createdAt, // Fecha de creación del registro
     updatedAt // Fecha de última actualización
@@ -29,6 +34,11 @@ class CentroDeportivo {
     this.imagenes = imagenes || []; // Array vacío por defecto
     this.servicios = servicios || []; // Array vacío por defecto
     this.estado = estado || 'abierto'; // Por defecto está abierto
+    
+    this.braintreeMerchantId = braintreeMerchantId || null; // Nulo si no está vinculada
+    this.braintreeAccountId = braintreeAccountId || null; // Opcional
+    this.braintreeStatus = braintreeStatus || 'pendiente'; // Estado inicial
+
     // Estructura para redes sociales: {facebook: url, instagram: url, twitter: url, etc}
     this.redesSociales = redesSociales || {}; // Objeto vacío por defecto
     this.createdAt = createdAt || new Date().toISOString();
