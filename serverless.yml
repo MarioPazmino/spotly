@@ -50,6 +50,7 @@ provider:
             - !GetAtt CentrosDeportivosTable.Arn
             - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/*"]]
             - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/index/UserIdIndex"]]
+            - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/index/CedulaJuridicaIndex"]]
             # Recursos para tabla Canchas
             - !GetAtt CanchasTable.Arn
             - !Join ["", [!GetAtt CanchasTable.Arn, "/*"]]
@@ -69,11 +70,15 @@ provider:
             - !Join ["", [!GetAtt ReservasTable.Arn, "/index/CanchaFechaIndex"]]
             - !Join ["", [!GetAtt ReservasTable.Arn, "/index/UserIdIndex"]]
             - !Join ["", [!GetAtt ReservasTable.Arn, "/index/HorarioIdIndex"]]
+            - !Join ["", [!GetAtt ReservasTable.Arn, "/index/CodigoPromoIndex"]]
             # Recursos para tabla Pagos
             - !GetAtt PagosTable.Arn
             - !Join ["", [!GetAtt PagosTable.Arn, "/*"]]
             - !Join ["", [!GetAtt PagosTable.Arn, "/index/ReservaIndex"]]
             - !Join ["", [!GetAtt PagosTable.Arn, "/index/UserIndex"]]
+            - !Join ["", [!GetAtt PagosTable.Arn, "/index/CentroDeportivoIndex"]]
+            - !Join ["", [!GetAtt PagosTable.Arn, "/index/MetodoPagoIndex"]]
+            - !Join ["", [!GetAtt PagosTable.Arn, "/index/EstadoIndex"]]
             # Recursos para tabla Reseñas
             - !GetAtt ResenasTable.Arn
             - !Join ["", [!GetAtt ResenasTable.Arn, "/*"]]
@@ -85,7 +90,11 @@ provider:
             - !GetAtt NotificacionesTable.Arn
             - !Join ["", [!GetAtt NotificacionesTable.Arn, "/*"]]
             - !Join ["", [!GetAtt NotificacionesTable.Arn, "/index/ReceptorIndex"]]
-            - !Join ["", [!GetAtt NotificacionesTable.Arn, "/index/EmisorIndex"]]     
+            - !Join ["", [!GetAtt NotificacionesTable.Arn, "/index/EmisorIndex"]]
+            # Recursos para tabla CuponDescuento
+            - !GetAtt CuponDescuentoTable.Arn
+            - !Join ["", [!GetAtt CuponDescuentoTable.Arn, "/*"]]
+            - !Join ["", [!GetAtt CuponDescuentoTable.Arn, "/index/CentroIdIndex"]]
 functions:
   api:
     handler: handler.api
@@ -172,6 +181,8 @@ resources:
             AttributeType: S
           - AttributeName: userId
             AttributeType: S
+          - AttributeName: cedulaJuridica
+            AttributeType: S
         KeySchema:
           - AttributeName: centroId
             KeyType: HASH
@@ -179,6 +190,12 @@ resources:
           - IndexName: UserIdIndex
             KeySchema:
               - AttributeName: userId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: CedulaJuridicaIndex
+            KeySchema:
+              - AttributeName: cedulaJuridica
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
@@ -218,6 +235,10 @@ resources:
             AttributeType: S
           - AttributeName: horarioId
             AttributeType: S
+          - AttributeName: descuentoAplicado
+            AttributeType: N
+          - AttributeName: codigoPromoAplicado
+            AttributeType: S
         KeySchema:
           - AttributeName: ReservaId
             KeyType: HASH
@@ -239,6 +260,12 @@ resources:
           - IndexName: HorarioIdIndex
             KeySchema:
               - AttributeName: horarioId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: CodigoPromoIndex
+            KeySchema:
+              - AttributeName: codigoPromoAplicado
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
@@ -323,6 +350,12 @@ resources:
             AttributeType: S
           - AttributeName: userId
             AttributeType: S
+          - AttributeName: centroDeportivoId
+            AttributeType: S
+          - AttributeName: metodoPago
+            AttributeType: S
+          - AttributeName: estado
+            AttributeType: S
         KeySchema:
           - AttributeName: pagoId
             KeyType: HASH
@@ -336,6 +369,24 @@ resources:
           - IndexName: UserIndex
             KeySchema:
               - AttributeName: userId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: CentroDeportivoIndex
+            KeySchema:
+              - AttributeName: centroDeportivoId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: MetodoPagoIndex
+            KeySchema:
+              - AttributeName: metodoPago
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: EstadoIndex
+            KeySchema:
+              - AttributeName: estado
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
@@ -410,6 +461,26 @@ resources:
           - IndexName: EmisorIndex
             KeySchema:
               - AttributeName: emisorId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+    CuponDescuentoTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: CuponDescuento${self:custom.tablePrefix}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: cuponId
+            AttributeType: S
+          - AttributeName: centroId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: cuponId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: CentroIdIndex
+            KeySchema:
+              - AttributeName: centroId
                 KeyType: HASH
             Projection:
               ProjectionType: ALL

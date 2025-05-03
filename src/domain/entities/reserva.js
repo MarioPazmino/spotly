@@ -11,7 +11,8 @@ class Reserva {
     estado, // Estado: "Pendiente", "Pagado", "Cancelado"
     total, // Monto total a pagar
     notas, // Instrucciones especiales o comentarios
-    codigoPromoAplicado, // Código de promoción/descuento
+    codigoPromoAplicado, // Código del cupón (ej.: "DESCUENTO10")
+    descuentoAplicado, // Monto del descuento aplicado (ej.: $5)
     cancelacionMotivo, // Razón de cancelación, si aplica
     createdAt, // Fecha de creación del registro
     updatedAt // Fecha de última actualización
@@ -27,6 +28,7 @@ class Reserva {
     this.total = total;
     this.notas = notas || ''; // Cadena vacía por defecto
     this.codigoPromoAplicado = codigoPromoAplicado || null; // Nulo si no hay promoción
+    this.descuentoAplicado = descuentoAplicado || 0; // Monto del descuento aplicado (ej.: $5)
     this.cancelacionMotivo = cancelacionMotivo || null; // Nulo si no fue cancelada
     this.createdAt = createdAt || new Date().toISOString();
     this.updatedAt = updatedAt || new Date().toISOString();
