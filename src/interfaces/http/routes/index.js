@@ -9,6 +9,7 @@ router.use('/v1', v1);
 
 // Rutas de usuarios
 v1.use('/usuarios', require('./v1/userRoutes'));
+v1.use('/centros-deportivos', require('./v1/centroDeportivoRoutes'));
 
 // Futuras rutas
 // v1.use('/centros-deportivos', require('./v1/centroDeportivoRoutes'));

@@ -3,6 +3,7 @@ const express = require('express');
 const serverless = require('serverless-http');
 const cors = require('cors');
 const UserRepository = require('./src/infrastructure/repositories/userRepository');
+const CentroDeportivoRepository = require('./src/infrastructure/repositories/centroDeportivoRepository');
 const errorHandler = require('./src/interfaces/middlewares/errorHandler');
 const routes = require('./src/interfaces/http/routes');
 
@@ -10,9 +11,12 @@ const app = express();
 
 // Crear una única instancia del repositorio
 const userRepository = new UserRepository();
+const centroDeportivoRepository = new CentroDeportivoRepository();
 
 // Configuración de middlewares
 app.set('userRepository', userRepository);
+app.set('centroDeportivoRepository', centroDeportivoRepository);
+
 
 app.use(cors({
   exposedHeaders: ['X-Access-Token'] // Permitir encabezados personalizados
