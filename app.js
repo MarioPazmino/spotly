@@ -5,6 +5,7 @@ const cors = require('cors');
 const UserRepository = require('./src/infrastructure/repositories/userRepository');
 const CentroDeportivoRepository = require('./src/infrastructure/repositories/centroDeportivoRepository');
 const CanchasRepository = require('./src/infrastructure/repositories/canchasRepository');
+const HorariosRepository = require('./src/infrastructure/repositories/horariosRepository');
 const errorHandler = require('./src/interfaces/middlewares/errorHandler');
 const routes = require('./src/interfaces/http/routes');
 
@@ -29,11 +30,13 @@ const app = express();
 const userRepository = new UserRepository();
 const centroDeportivoRepository = new CentroDeportivoRepository();
 const canchasRepository = new CanchasRepository();
+const horariosRepository = new HorariosRepository();
 
 // Configuración de middlewares
 app.set('userRepository', userRepository);
 app.set('centroDeportivoRepository', centroDeportivoRepository);
 app.set('canchasRepository', canchasRepository);
+app.set('horariosRepository', horariosRepository);
  
 
 app.use(cors({

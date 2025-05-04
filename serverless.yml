@@ -65,22 +65,16 @@ provider:
             - !Join ["", [!GetAtt HorariosTable.Arn, "/*"]]
             - !Join ["", [!GetAtt HorariosTable.Arn, "/index/CanchaFechaIndex"]]
             - !Join ["", [!GetAtt HorariosTable.Arn, "/index/ReservaIdIndex"]]
-            - !Join ["", [!GetAtt HorariosTable.Arn, "/index/UserIdIndex"]]
             # Recursos para tabla Reservas
             - !GetAtt ReservasTable.Arn
             - !Join ["", [!GetAtt ReservasTable.Arn, "/*"]]
             - !Join ["", [!GetAtt ReservasTable.Arn, "/index/CanchaFechaIndex"]]
             - !Join ["", [!GetAtt ReservasTable.Arn, "/index/UserIdIndex"]]
-            - !Join ["", [!GetAtt ReservasTable.Arn, "/index/HorarioIdIndex"]]
-            - !Join ["", [!GetAtt ReservasTable.Arn, "/index/CodigoPromoIndex"]]
             # Recursos para tabla Pagos
             - !GetAtt PagosTable.Arn
             - !Join ["", [!GetAtt PagosTable.Arn, "/*"]]
             - !Join ["", [!GetAtt PagosTable.Arn, "/index/ReservaIndex"]]
             - !Join ["", [!GetAtt PagosTable.Arn, "/index/UserIndex"]]
-            - !Join ["", [!GetAtt PagosTable.Arn, "/index/CentroDeportivoIndex"]]
-            - !Join ["", [!GetAtt PagosTable.Arn, "/index/MetodoPagoIndex"]]
-            - !Join ["", [!GetAtt PagosTable.Arn, "/index/EstadoIndex"]]
             # Recursos para tabla Reseñas
             - !GetAtt ResenasTable.Arn
             - !Join ["", [!GetAtt ResenasTable.Arn, "/*"]]
@@ -256,7 +250,7 @@ resources:
         TableName: Reservas${self:custom.tablePrefix}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
-          - AttributeName: ReservaId
+          - AttributeName: reservaId
             AttributeType: S
           - AttributeName: canchaId
             AttributeType: S
@@ -264,14 +258,8 @@ resources:
             AttributeType: S
           - AttributeName: userId
             AttributeType: S
-          - AttributeName: horarioId
-            AttributeType: S
-          - AttributeName: descuentoAplicado
-            AttributeType: N
-          - AttributeName: codigoPromoAplicado
-            AttributeType: S
         KeySchema:
-          - AttributeName: ReservaId
+          - AttributeName: reservaId
             KeyType: HASH
         GlobalSecondaryIndexes:
           - IndexName: CanchaFechaIndex
@@ -288,15 +276,63 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-          - IndexName: HorarioIdIndex
+    HorariosTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Horarios${self:custom.tablePrefix}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: horarioId
+            AttributeType: S
+          - AttributeName: canchaId
+            AttributeType: S
+          - AttributeName: fecha
+            AttributeType: S
+          - AttributeName: reservaId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: horarioId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: CanchaFechaIndex
             KeySchema:
-              - AttributeName: horarioId
+              - AttributeName: canchaId
+                KeyType: HASH
+              - AttributeName: fecha
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: ReservaIdIndex
+            KeySchema:
+              - AttributeName: reservaId
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-          - IndexName: CodigoPromoIndex
+    PagosTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Pagos${self:custom.tablePrefix}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: pagoId
+            AttributeType: S
+          - AttributeName: reservaId
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: pagoId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: ReservaIdIndex
             KeySchema:
-              - AttributeName: codigoPromoAplicado
+              - AttributeName: reservaId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: UserIdIndex
+            KeySchema:
+              - AttributeName: userId
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
@@ -326,98 +362,6 @@ resources:
           - IndexName: PendienteAprobacionIndex
             KeySchema:
               - AttributeName: pendienteAprobacion
-                KeyType: HASH
-            Projection:
-              ProjectionType: ALL
-    HorariosTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: Horarios${self:custom.tablePrefix}
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: horarioId
-            AttributeType: S
-          - AttributeName: canchaId
-            AttributeType: S
-          - AttributeName: fecha
-            AttributeType: S
-          - AttributeName: userId
-            AttributeType: S
-          - AttributeName: reservaId
-            AttributeType: S
-        KeySchema:
-          - AttributeName: horarioId
-            KeyType: HASH
-        GlobalSecondaryIndexes:
-          - IndexName: CanchaFechaIndex
-            KeySchema:
-              - AttributeName: canchaId
-                KeyType: HASH
-              - AttributeName: fecha
-                KeyType: RANGE
-            Projection:
-              ProjectionType: ALL
-          - IndexName: UserIdIndex
-            KeySchema:
-              - AttributeName: userId
-                KeyType: HASH
-            Projection:
-              ProjectionType: ALL
-          - IndexName: ReservaIdIndex
-            KeySchema:
-              - AttributeName: reservaId
-                KeyType: HASH
-            Projection:
-              ProjectionType: ALL
-    PagosTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: Pagos${self:custom.tablePrefix}
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: pagoId
-            AttributeType: S
-          - AttributeName: ReservaId
-            AttributeType: S
-          - AttributeName: userId
-            AttributeType: S
-          - AttributeName: centroDeportivoId
-            AttributeType: S
-          - AttributeName: metodoPago
-            AttributeType: S
-          - AttributeName: estado
-            AttributeType: S
-        KeySchema:
-          - AttributeName: pagoId
-            KeyType: HASH
-        GlobalSecondaryIndexes:
-          - IndexName: ReservaIndex
-            KeySchema:
-              - AttributeName: ReservaId
-                KeyType: HASH
-            Projection:
-              ProjectionType: ALL
-          - IndexName: UserIndex
-            KeySchema:
-              - AttributeName: userId
-                KeyType: HASH
-            Projection:
-              ProjectionType: ALL
-          - IndexName: CentroDeportivoIndex
-            KeySchema:
-              - AttributeName: centroDeportivoId
-                KeyType: HASH
-            Projection:
-              ProjectionType: ALL
-          - IndexName: MetodoPagoIndex
-            KeySchema:
-              - AttributeName: metodoPago
-                KeyType: HASH
-            Projection:
-              ProjectionType: ALL
-          - IndexName: EstadoIndex
-            KeySchema:
-              - AttributeName: estado
                 KeyType: HASH
             Projection:
               ProjectionType: ALL

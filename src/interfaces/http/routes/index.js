@@ -11,9 +11,9 @@ router.use('/v1', v1);
 v1.use('/usuarios', require('./v1/userRoutes'));
 v1.use('/centros-deportivos', require('./v1/centroDeportivoRoutes'));
 v1.use('/canchas', require('./v1/canchasRoutes'));
-// Futuras rutas
-// v1.use('/centros-deportivos', require('./v1/centroDeportivoRoutes'));
-// v1.use('/canchas', require('./v1/canchaRoutes'));
+v1.use('/horarios', require('./v1/horariosRoutes'));
+v1.use('/reservas', require('./v1/reservasRoutes'));
+v1.use('/pagos', require('./v1/pagosRoutes'));
 
 module.exports = router;
 
