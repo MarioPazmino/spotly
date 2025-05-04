@@ -1,4 +1,4 @@
-// Funciones de sanitización para prevenir XSS y ataques de inyección
+// src/utils/sanitizeInput.js
 const xss = require('xss');
 
 /**
@@ -12,7 +12,21 @@ function sanitizeString(str) {
 }
 
 /**
- * Sanitiza un objeto recursivamente
+ * Sanitiza el campo descripcion: elimina XSS, recorta a 500 caracteres y limpia espacios
+ * @param {string} str
+ * @returns {string}
+ */
+function sanitizeDescripcion(str) {
+  if (typeof str !== 'string') return str;
+  // Limitar longitud máxima a 500 caracteres
+  let clean = str.trim().slice(0, 500);
+  // Sanitizar contra XSS
+  clean = xss(clean);
+  return clean;
+}
+
+/**
+ * Sanitiza un objeto recursivamente, aplicando reglas especiales a ciertos campos
  * @param {object} obj
  * @returns {object}
  */
@@ -22,7 +36,11 @@ function sanitizeObject(obj) {
   } else if (obj && typeof obj === 'object') {
     const clean = {};
     for (const key in obj) {
-      clean[key] = sanitizeObject(obj[key]);
+      if (key === 'descripcion') {
+        clean[key] = sanitizeDescripcion(obj[key]);
+      } else {
+        clean[key] = sanitizeObject(obj[key]);
+      }
     }
     return clean;
   } else if (typeof obj === 'string') {
@@ -31,4 +49,4 @@ function sanitizeObject(obj) {
   return obj;
 }
 
-module.exports = { sanitizeString, sanitizeObject };
+module.exports = { sanitizeString, sanitizeObject, sanitizeDescripcion };

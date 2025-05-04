@@ -8,12 +8,18 @@ const registerSchema = Joi.object({
   email: Joi.string().email().required(),
   name: Joi.string().required(),
   role: Joi.string().valid('cliente', 'admin_centro').required(), // Validar roles permitidos
-  picture: Joi.string().uri().optional()
+  picture: Joi.string().uri().max(500).optional()
+    .messages({
+      'string.uri': 'La imagen de perfil debe ser una URL válida'
+    })
 });
 
 const updateSchema = Joi.object({
   name: Joi.string().optional(),
-  picture: Joi.string().uri().optional()
+  picture: Joi.string().uri().max(500).optional()
+    .messages({
+      'string.uri': 'La imagen de perfil debe ser una URL válida'
+    })
 });
 
 exports.createUser = async (req, res, next) => {

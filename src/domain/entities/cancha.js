@@ -2,7 +2,7 @@
 class Cancha {
   constructor({
     canchaId, // Identificador único de la cancha
-    centroDeportivoId, // ID del centro deportivo al que pertenece (FK)
+    centroId, // ID del centro deportivo al que pertenece (FK)
     tipo, // Tipo de cancha: 'futbol', 'tenis', 'basket', etc.
     capacidad, // Cantidad máxima de jugadores permitidos
     precioPorHora, // Tarifa de alquiler por hora
@@ -14,14 +14,21 @@ class Cancha {
     updatedAt // Fecha de última actualización
   }) {
     this.canchaId = canchaId;
-    this.centroDeportivoId = centroDeportivoId;
+    this.centroId = centroId;
     this.tipo = tipo;
     this.capacidad = capacidad;
     this.precioPorHora = precioPorHora;
     this.estado = estado || 'activa'; // Por defecto está activa
     this.descripcion = descripcion || '';
     this.imagenes = imagenes || []; // Array vacío por defecto
-    this.equipamientoIncluido = equipamientoIncluido || []; // Array vacío por defecto
+    // Permitir que el usuario agregue cualquier equipamiento (sin lista blanca)
+    if (Array.isArray(equipamientoIncluido)) {
+      this.equipamientoIncluido = equipamientoIncluido
+        .map(e => typeof e === 'string' ? e.trim() : '')
+        .filter(Boolean);
+    } else {
+      this.equipamientoIncluido = [];
+    }
     this.createdAt = createdAt || new Date().toISOString();
     this.updatedAt = updatedAt || new Date().toISOString();
   }

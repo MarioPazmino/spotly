@@ -5,10 +5,24 @@ const CentroDeportivoController = require('../../controllers/v1/CentroDeportivoC
 const auth = require('../../../middlewares/CognitoAuthMiddleware').authenticate();
 const { validateCentro, validateLocationSearch, validateCentroQuery } = require('../../../middlewares/validateCentroDeportivo');
 const Authorization = require('../../../middlewares/authorization');
-const ImagenCentroController = require('../../controllers/v1/ImagenCentroController');
+const ImagenCentroController = require('../../controllers/v1/uploadImagenes/ImagenCentroController');
 const multer = require('multer');
 const upload = multer(); // memoria, no disco
 const checkCentroOwnership = require('../../../middlewares/checkCentroOwnership');
+const { validate: isUuid } = require('uuid');
+
+// Middleware inline para validar UUID
+function validateUUID(paramName) {
+  return (req, res, next) => {
+    const value = req.params[paramName];
+    if (!isUuid(value)) {
+      return res.status(400).json({
+        message: `El parámetro ${paramName} debe ser un UUID válido.`
+      });
+    }
+    next();
+  };
+}
 
 // Listar centros deportivos (acceso público o autenticado)
 router.get('/centros', auth, validateCentroQuery, CentroDeportivoController.listCentros);
@@ -20,10 +34,8 @@ router.get('/centros/cercanos', auth, validateLocationSearch, CentroDeportivoCon
 router.post('/centros', auth, validateCentro, (req, res, next) => {
   try {
     Authorization.checkPermission('write:centro')(req.user.groups);
-    
     // Asignar el ID del usuario al centro deportivo
     req.body.userId = req.user.sub;
-    
     CentroDeportivoController.createCentro(req, res, next);
   } catch (error) {
     next(error);
@@ -31,11 +43,12 @@ router.post('/centros', auth, validateCentro, (req, res, next) => {
 });
 
 // Obtener centro deportivo por ID (acceso público o autenticado)
-router.get('/centros/:centroId', auth, CentroDeportivoController.getCentroById);
+router.get('/centros/:centroId', auth, validateUUID('centroId'), CentroDeportivoController.getCentroById);
 
 // Actualizar centro deportivo (solo admin_centro dueño o super_admin)
 router.put('/centros/:centroId', 
   auth, 
+  validateUUID('centroId'),
   validateCentro,
   checkCentroOwnership,
   (req, res, next) => {
@@ -51,6 +64,7 @@ router.put('/centros/:centroId',
 // Actualizar parcialmente centro deportivo (solo admin_centro dueño o super_admin)
 router.patch('/centros/:centroId',
   auth,
+  validateUUID('centroId'),
   validateCentro,
   checkCentroOwnership,
   (req, res, next) => {
@@ -64,8 +78,9 @@ router.patch('/centros/:centroId',
 );
 
 // Eliminar centro deportivo (solo admin_centro dueño o super_admin)
-router.delete('/centros/:centroId', 
+router.delete('/centros/:centroId',
   auth,
+  validateUUID('centroId'),
   checkCentroOwnership,
   (req, res, next) => {
     try {
@@ -77,21 +92,21 @@ router.delete('/centros/:centroId',
   }
 );
 
-// --- Subida de imágenes para centros deportivos ---
-// Subir imágenes (archivos y/o URLs) a un centro deportivo
+// Subir imágenes a un centro deportivo
 router.post('/centros/:centroId/imagenes',
   auth,
+  validateUUID('centroId'),
   checkCentroOwnership,
-  (req, res, next) => {
-    try {
-      Authorization.checkPermission('write:centro')(req.user.groups);
-      next();
-    } catch (error) {
-      next(error);
-    }
-  },
   upload.array('imagenes', 3),
   ImagenCentroController.uploadImagenes
+);
+
+// Nuevo endpoint: Eliminar imagen específica de un centro deportivo
+router.delete('/centros/:centroId/imagenes/:key',
+  auth,
+  validateUUID('centroId'),
+  checkCentroOwnership,
+  ImagenCentroController.deleteImagen
 );
 
 module.exports = router;

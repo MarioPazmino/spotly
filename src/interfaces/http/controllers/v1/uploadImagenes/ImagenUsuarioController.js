@@ -1,8 +1,8 @@
 // src/interfaces/http/controllers/v1/ImagenUsuarioController.js
 const Boom = require('@hapi/boom');
-const UserService = require('../../../../infrastructure/services/userService');
-const { uploadImage, getPresignedUrl } = require('../../../../infrastructure/services/s3Service');
-const { sanitizeString } = require('../../../../utils/sanitizeInput');
+const UserService = require('../../../../../infrastructure/services/userService');
+const { uploadImage, getPresignedUrl } = require('../../../../../infrastructure/services/s3Service');
+const { sanitizeString } = require('../../../../../utils/sanitizeInput');
 
 /**
  * Subir o actualizar imagen de perfil de usuario (solo 1 imagen)
@@ -18,17 +18,13 @@ exports.uploadImagen = async (req, res, next) => {
       // Subir imagen como privada y obtener key
       const key = await uploadImage(req.file.buffer, req.file.originalname, userId);
       // Generar presigned URL para mostrar la imagen
-      url = getPresignedUrl(key, 3600); // 1 hora por defecto
+      url = getPresignedUrl(key); // Usar expiración configurable
     }
 
-    // 2. Procesar URL enviada en el body
-    if (req.body.url && typeof req.body.url === 'string' && /\.(jpg|jpeg|png)$/i.test(req.body.url)) {
-      // Sanitizar la URL antes de usarla
-      url = sanitizeString(req.body.url);
-    }
+    // Eliminada la opción de procesar URL externa por seguridad
 
     if (!url) {
-      throw Boom.badRequest('Debes subir una imagen válida o proporcionar una URL de imagen (.jpg, .jpeg, .png)');
+      throw Boom.badRequest('Debes subir una imagen válida.');
     }
 
     // 3. Actualizar usuario

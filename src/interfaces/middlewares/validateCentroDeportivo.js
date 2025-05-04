@@ -47,9 +47,9 @@ const centroDeportivoBaseSchema = {
       })
   }),
   imagenes: Joi.array().items(
-    Joi.string().uri().pattern(/\.(jpg|jpeg|png)$/i)
+    Joi.string().uri().pattern(/\.(jpg|jpeg|png|webp)$/i)
       .messages({
-        'string.pattern.base': 'La imagen debe ser una URL que termine en .jpg, .jpeg o .png',
+        'string.pattern.base': 'La imagen debe ser una URL que termine en .jpg, .jpeg, .png o .webp',
         'string.uri': 'La imagen debe ser una URL válida'
       })
   ),

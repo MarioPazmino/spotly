@@ -22,10 +22,10 @@ async function uploadImage(buffer, originalName, centroId) {
   const ext = path.extname(originalName).toLowerCase();
   const key = `centros/${centroId}/${uuidv4()}${ext}`;
 
-  // Validar tamaño máximo (ahora 15MB)
-  const MAX_SIZE_BYTES = 15 * 1024 * 1024;
+  // Validar tamaño máximo (ahora 5MB)
+  const MAX_SIZE_BYTES = 5 * 1024 * 1024;
   if (buffer.length > MAX_SIZE_BYTES) {
-    throw new Error('La imagen excede el tamaño máximo permitido de 15MB.');
+    throw new Error('La imagen excede el tamaño máximo permitido de 5MB.');
   }
 
   // Validar tipo MIME real usando sharp
@@ -39,6 +39,21 @@ async function uploadImage(buffer, originalName, centroId) {
   // Solo permitir JPEG, PNG y WEBP
   if (!['jpeg', 'png', 'webp'].includes(metadata.format)) {
     throw new Error('Solo se permiten imágenes JPEG, PNG o WEBP.');
+  }
+
+  // Validar el MIME type real del buffer (defensivo)
+  // Usar magic numbers para validar el buffer (sin instalar dependencias extra)
+  function isValidMime(buffer, format) {
+    // JPEG: FF D8 FF
+    if (format === 'jpeg' && buffer.slice(0, 3).toString('hex') === 'ffd8ff') return true;
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    if (format === 'png' && buffer.slice(0, 8).toString('hex') === '89504e470d0a1a0a') return true;
+    // WEBP: RIFF....WEBP
+    if (format === 'webp' && buffer.slice(8, 12).toString() === 'WEBP') return true;
+    return false;
+  }
+  if (!isValidMime(buffer, metadata.format)) {
+    throw new Error('El archivo no corresponde a una imagen válida.');
   }
 
   // Ajustar ContentType según el formato real
@@ -65,14 +80,22 @@ async function uploadImage(buffer, originalName, centroId) {
 /**
  * Genera una presigned URL para acceder temporalmente a un objeto privado
  * @param {string} key - Key del objeto en S3
- * @param {number} expiresInSeconds - Tiempo de expiración en segundos (por defecto 1h)
+ * @param {number} [expiresInSeconds] - Tiempo de expiración en segundos (opcional, si no se pasa se toma de ENV o 1h)
  * @returns {string} Presigned URL
  */
-function getPresignedUrl(key, expiresInSeconds = 3600) {
+function getPresignedUrl(key, expiresInSeconds) {
+  // Usar variable de entorno si no se pasa el parámetro
+  let expiration = expiresInSeconds;
+  if (typeof expiration !== 'number' || isNaN(expiration)) {
+    expiration = parseInt(process.env.PRESIGNED_URL_EXPIRATION_SECONDS, 10);
+    if (isNaN(expiration) || expiration <= 0) {
+      expiration = 3600; // 1 hora por defecto
+    }
+  }
   const params = {
     Bucket: BUCKET,
     Key: key,
-    Expires: expiresInSeconds,
+    Expires: expiration,
   };
   return s3.getSignedUrl('getObject', params);
 }

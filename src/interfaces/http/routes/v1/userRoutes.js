@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 
 const UserController = require('../../controllers/v1/UserController');
-const ImagenUsuarioController = require('../../controllers/v1/ImagenUsuarioController');
+const ImagenUsuarioController = require('../../controllers/v1/uploadImagenes/ImagenUsuarioController');
 const authenticate = require('../../../middlewares/CognitoAuthMiddleware');
 const { checkPermission } = require('../../../middlewares/authorization');
 const multer = require('multer');

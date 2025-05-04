@@ -6,6 +6,10 @@ const Boom = require('@hapi/boom');
 const { v4: uuidv4 } = require('uuid'); // Necesitarás añadir esta dependencia
 const UserRepository = require('../repositories/userRepository');
 const { sanitizeObject } = require('../../utils/sanitizeInput');
+const AWS = require('aws-sdk');
+
+// Cambia el límite de tamaño máximo de imagen a 5MB en todos los lugares relevantes
+const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
 class CentroDeportivoService {
   constructor() {
@@ -35,6 +39,14 @@ class CentroDeportivoService {
         filters.abiertoAntesDe
       );
     }
+    
+    // Convertir solo keys S3 válidas a presigned URLs
+    filteredItems = filteredItems.map(centro => {
+      centro.imagenes = (centro.imagenes || [])
+        .filter(img => typeof img === 'string' && img.startsWith('centros/'))
+        .map(key => getPresignedUrl(key));
+      return centro;
+    });
     
     // Actualizar los resultados con los ítems filtrados
     return {
@@ -86,9 +98,12 @@ class CentroDeportivoService {
   async getCentroById(centroId) {
     // Validar formato del ID
     this.validateCentroId(centroId);
-    
     const centro = await this.repo.findById(centroId);
     if (!centro) throw Boom.notFound(`Centro deportivo con ID ${centroId} no encontrado`);
+    // Solo retornar presigned URLs para keys de S3 válidas
+    centro.imagenes = (centro.imagenes || [])
+      .filter(img => typeof img === 'string' && img.startsWith('centros/'))
+      .map(key => getPresignedUrl(key));
     return centro;
   }
 
@@ -97,60 +112,71 @@ class CentroDeportivoService {
     const cleanData = sanitizeObject(updateData);
     // Validar formato del ID
     this.validateCentroId(centroId);
-    
     // Verificar que el centro existe
     const existingCentro = await this.repo.findById(centroId);
     if (!existingCentro) {
       throw Boom.notFound(`Centro deportivo con ID ${centroId} no encontrado`);
     }
-
     // Validar que haya al menos un campo para actualizar
     if (Object.keys(cleanData).length === 0) {
       throw Boom.badRequest('Debe proporcionar al menos un campo para actualizar');
     }
-    
     // Calcula los campos auxiliares de horario antes de actualizar
     if (cleanData.horario) {
       const { horaAperturaMinima, horaCierreMaxima } = calcularHorasMinMax(cleanData.horario);
       cleanData.horaAperturaMinima = horaAperturaMinima;
       cleanData.horaCierreMaxima = horaCierreMaxima;
     }
-
+    // Validación defensiva: no permitir más de 3 imágenes
+    let imagenes = cleanData.imagenes !== undefined ? cleanData.imagenes : existingCentro.imagenes || [];
+    if (Array.isArray(imagenes)) {
+      imagenes = imagenes.slice(0, 3);
+      if (imagenes.length > 3) {
+        throw Boom.badRequest('No se permiten más de 3 imágenes por centro deportivo.');
+      }
+      cleanData.imagenes = imagenes;
+    }
     // Añadir marca de tiempo de actualización
     const dataToUpdate = {
       ...cleanData,
       updatedAt: new Date().toISOString()
     };
-    
-    return await this.repo.update(centroId, dataToUpdate);
+    // Condición optimista: solo actualiza si las imágenes no cambiaron desde que las leíste
+    return await this.repo.update(centroId, dataToUpdate, {
+      ConditionExpression: 'attribute_not_exists(imagenes) OR imagenes = :oldImagenes',
+      ExpressionAttributeValues: {
+        ':oldImagenes': existingCentro.imagenes || []
+      }
+    });
   }
 
 
   async deleteCentro(centroId) {
     // Validar formato del ID
     this.validateCentroId(centroId);
-    
     // Verificar que el centro existe
     const existingCentro = await this.repo.findById(centroId);
     if (!existingCentro) {
       throw Boom.notFound(`Centro deportivo con ID ${centroId} no encontrado`);
     }
-    
+    // Eliminar imágenes en S3 si existen
+    if (existingCentro.imagenes && Array.isArray(existingCentro.imagenes)) {
+      const s3Keys = existingCentro.imagenes.filter(img => typeof img === 'string' && img.startsWith('centros/'));
+      if (s3Keys.length > 0) {
+        const s3 = new AWS.S3({ region: process.env.AWS_REGION || 'us-east-1' });
+        const BUCKET = process.env.IMAGENES_CENTROS_BUCKET || `spotly-centros-imagenes-dev`;
+        const deleteParams = {
+          Bucket: BUCKET,
+          Delete: {
+            Objects: s3Keys.map(Key => ({ Key })),
+            Quiet: true
+          }
+        };
+        await s3.deleteObjects(deleteParams).promise();
+      }
+    }
+    // Eliminar el centro de la base de datos
     return await this.repo.delete(centroId);
-  }
-
-  // Método auxiliar para validar el formato del centroId
-  validateCentroId(centroId) {
-    // Verificar que el ID no sea null o undefined
-    if (!centroId) {
-      throw Boom.badRequest('El ID del centro deportivo es obligatorio');
-    }
-    
-    // Verificar formato UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(centroId)) {
-      throw Boom.badRequest('El formato del ID de centro deportivo es inválido');
-    }
   }
 
   // NUEVO MÉTODO: Buscar centros cercanos por ubicación GPS
@@ -244,6 +270,20 @@ class CentroDeportivoService {
       return cumpleHorario;
     });
   }
+
+  // Método auxiliar para validar el formato del centroId
+  validateCentroId(centroId) {
+    // Verificar que el ID no sea null o undefined
+    if (!centroId) {
+      throw Boom.badRequest('El ID del centro deportivo es obligatorio');
+    }
+    
+    // Verificar formato UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(centroId)) {
+      throw Boom.badRequest('El formato del ID de centro deportivo es inválido');
+    }
+  }
 }
 
 // Función auxiliar para calcular los campos auxiliares de horario
@@ -256,6 +296,18 @@ function calcularHorasMinMax(horario) {
     horaAperturaMinima: horasApertura[0],
     horaCierreMaxima: horasCierre[horasCierre.length - 1]
   };
+}
+
+// Función auxiliar para obtener presigned URLs de S3
+function getPresignedUrl(key) {
+  const s3 = new AWS.S3({ region: process.env.AWS_REGION || 'us-east-1' });
+  const BUCKET = process.env.IMAGENES_CENTROS_BUCKET || `spotly-centros-imagenes-dev`;
+  const params = {
+    Bucket: BUCKET,
+    Key: key,
+    Expires: 3600 // 1 hora
+  };
+  return s3.getSignedUrl('getObject', params);
 }
 
 module.exports = new CentroDeportivoService();

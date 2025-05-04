@@ -12,6 +12,7 @@ class UserService {
     this.ADMIN_CENTRO_GROUP_NAME = process.env.ADMIN_CENTRO_GROUP_NAME;
     this.SUPER_ADMIN_GROUP_NAME = process.env.SUPER_ADMIN_GROUP_NAME;
     this.CLIENTE_GROUP_NAME = process.env.CLIENTE_GROUP_NAME;
+    this.MAX_SIZE_BYTES = 5 * 1024 * 1024; // Cambia el límite de tamaño máximo de imagen a 5MB
   }
 
   async registerUser(userData) {
@@ -129,9 +130,46 @@ class UserService {
       if (!user) {
         throw Boom.notFound('Usuario no encontrado');
       }
+      // Manejar imagenPerfil: S3, externa o null
+      if (user.imagenPerfil && typeof user.imagenPerfil === 'string') {
+        if (user.imagenPerfil.startsWith('usuarios/')) {
+          user.imagenPerfil = this.getPresignedUrl(user.imagenPerfil);
+        } else if (user.imagenPerfil.startsWith('http')) {
+          // Es una URL externa (Facebook, Google, etc.), se deja tal cual
+        } else {
+          user.imagenPerfil = null;
+        }
+      } else {
+        user.imagenPerfil = null;
+      }
       return user;
     } catch (error) {
       logger.error(`Error obteniendo usuario: ${error.message}`, { error });
+      throw Boom.boomify(error);
+    }
+  }
+
+  async listUsers(options = {}) {
+    try {
+      const result = await this.userRepository.findAll(options);
+      // Convertir solo keys S3 válidas a presigned URLs o dejar URL externa
+      result.items = result.items.map(user => {
+        if (user.imagenPerfil && typeof user.imagenPerfil === 'string') {
+          if (user.imagenPerfil.startsWith('usuarios/')) {
+            user.imagenPerfil = this.getPresignedUrl(user.imagenPerfil);
+          } else if (user.imagenPerfil.startsWith('http')) {
+            // Es una URL externa (Facebook, Google, etc.), se deja tal cual
+          } else {
+            user.imagenPerfil = null;
+          }
+        } else {
+          user.imagenPerfil = null;
+        }
+        return user;
+      });
+      return result;
+    } catch (error) {
+      logger.error(`Error listando usuarios: ${error.message}`, { error });
       throw Boom.boomify(error);
     }
   }
@@ -152,6 +190,11 @@ class UserService {
         throw Boom.forbidden('No tienes permisos para modificar campos sensibles');
       }
 
+      // Validar tamaño de imagen
+      if (updateData.imagenPerfil && updateData.imagenPerfil.size > this.MAX_SIZE_BYTES) {
+        throw Boom.badRequest('La imagen supera el tamaño máximo permitido de 5MB');
+      }
+
       return await this.userRepository.update(userId, {
         ...updateData,
         updatedAt: new Date().toISOString()
@@ -166,7 +209,21 @@ class UserService {
     try {
       // Solo super admins pueden eliminar usuarios
       await this.verifyAdminPermissions(requesterId, 'super_admin');
-      // Eliminar usuario
+      // Obtener datos del usuario para eliminar imágenes de S3
+      const user = await this.getUserById(userId);
+      if (user && user.imagenPerfil && typeof user.imagenPerfil === 'string' && user.imagenPerfil.startsWith('usuarios/')) {
+        const s3 = new AWS.S3({ region: process.env.AWS_REGION || 'us-east-1' });
+        const BUCKET = process.env.IMAGENES_CENTROS_BUCKET || `spotly-centros-imagenes-dev`;
+        const deleteParams = {
+          Bucket: BUCKET,
+          Delete: {
+            Objects: [{ Key: user.imagenPerfil }],
+            Quiet: true
+          }
+        };
+        await s3.deleteObjects(deleteParams).promise();
+      }
+      // Eliminar usuario de la base de datos
       return await this.userRepository.delete(userId);
     } catch (error) {
       logger.error(`Error eliminando usuario: ${error.message}`, { error });
@@ -199,6 +256,17 @@ class UserService {
     }
 
     return true;
+  }
+
+  getPresignedUrl(key) {
+    const s3 = new AWS.S3({ region: process.env.AWS_REGION || 'us-east-1' });
+    const BUCKET = process.env.IMAGENES_CENTROS_BUCKET || `spotly-centros-imagenes-dev`;
+    const params = {
+      Bucket: BUCKET,
+      Key: key,
+      Expires: 60 * 60 // 1 hora
+    };
+    return s3.getSignedUrl('getObject', params);
   }
 }
 

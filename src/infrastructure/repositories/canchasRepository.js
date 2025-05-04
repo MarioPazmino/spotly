@@ -1,0 +1,92 @@
+// src/infrastructure/repositories/canchasRepository.js
+const AWS = require('aws-sdk');
+const dynamoDB = new AWS.DynamoDB.DocumentClient();
+
+class CanchasRepository {
+  constructor() {
+    this.TABLE_NAME = process.env.CANCHAS_TABLE || 'Canchas';
+  }
+
+  async save(cancha) {
+    const params = {
+      TableName: this.TABLE_NAME,
+      Item: cancha
+    };
+    await dynamoDB.put(params).promise();
+    return cancha;
+  }
+
+  async findById(canchaId) {
+    const params = {
+      TableName: this.TABLE_NAME,
+      Key: { canchaId }
+    };
+    const result = await dynamoDB.get(params).promise();
+    return result.Item || null;
+  }
+
+  async update(canchaId, updateData) {
+    const updateExpression = [];
+    const ExpressionAttributeNames = {};
+    const ExpressionAttributeValues = {};
+    for (const key in updateData) {
+      updateExpression.push(`#${key} = :${key}`);
+      ExpressionAttributeNames[`#${key}`] = key;
+      ExpressionAttributeValues[`:${key}`] = updateData[key];
+    }
+    const params = {
+      TableName: this.TABLE_NAME,
+      Key: { canchaId },
+      UpdateExpression: 'SET ' + updateExpression.join(', '),
+      ExpressionAttributeNames,
+      ExpressionAttributeValues,
+      ReturnValues: 'ALL_NEW'
+    };
+    const result = await dynamoDB.update(params).promise();
+    return result.Attributes;
+  }
+
+  async delete(canchaId) {
+    const params = {
+      TableName: this.TABLE_NAME,
+      Key: { canchaId }
+    };
+    await dynamoDB.delete(params).promise();
+    return { canchaId };
+  }
+
+  async findAllByCentro(centroId, options = {}) {
+    const params = {
+      TableName: this.TABLE_NAME,
+      IndexName: 'CentroIdIndex',
+      KeyConditionExpression: 'centroId = :centroId',
+      ExpressionAttributeValues: {
+        ':centroId': centroId
+      },
+      Limit: options.limit ? Number(options.limit) : undefined,
+      ExclusiveStartKey: options.lastEvaluatedKey || undefined
+    };
+    // Eliminar propiedades undefined
+    Object.keys(params).forEach(k => params[k] === undefined && delete params[k]);
+    const result = await dynamoDB.query(params).promise();
+    let items = result.Items || [];
+    // Filtros simples en memoria: tipo y disponible
+    if (options.tipo) {
+      items = items.filter(c => c.tipo === options.tipo);
+    }
+    if (options.disponible !== undefined) {
+      if (options.disponible) {
+        items = items.filter(c => c.estado === 'activa' && c.capacidad > 0);
+      } else {
+        items = items.filter(c => c.estado !== 'activa' || c.capacidad <= 0);
+      }
+    }
+    return {
+      items,
+      lastEvaluatedKey: result.LastEvaluatedKey || null,
+      count: items.length
+    };
+  }
+}
+
+module.exports = CanchasRepository;

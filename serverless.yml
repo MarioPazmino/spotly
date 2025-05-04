@@ -104,6 +104,19 @@ functions:
       - httpApi:
           path: /{proxy+}
           method: ANY
+  cleanupOrphanImages:
+    handler: scripts/cleanupOrphanImagesLambda.handler
+    memorySize: 512
+    timeout: 900 # 15 minutos máximo para limpieza masiva
+    environment:
+      AWS_REGION: ${self:provider.region}
+      IMAGENES_CENTROS_BUCKET: spotly-centros-imagenes-${self:custom.stage}
+      CANCHAS_TABLE_NAME: ${self:custom.commonEnvVars.CANCHAS_TABLE}
+      CENTROS_TABLE_NAME: ${self:custom.commonEnvVars.CENTROS_DEPORTIVOS_TABLE}
+    events:
+      - schedule:
+          rate: cron(0 3 1 * ? *) # Ejecuta el día 1 de cada mes a las 03:00 UTC
+          enabled: true
 resources:
   Resources:
     #======================================================================================#
