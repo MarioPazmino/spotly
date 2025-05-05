@@ -31,12 +31,14 @@ const userRepository = new UserRepository();
 const centroDeportivoRepository = new CentroDeportivoRepository();
 const canchasRepository = new CanchasRepository();
 const horariosRepository = new HorariosRepository();
+const cuponDescuentoRepository = new CuponDescuentoRepository();
 
 // Configuración de middlewares
 app.set('userRepository', userRepository);
 app.set('centroDeportivoRepository', centroDeportivoRepository);
 app.set('canchasRepository', canchasRepository);
 app.set('horariosRepository', horariosRepository);
+app.set('cuponDescuentoRepository', cuponDescuentoRepository);
  
 
 app.use(cors({

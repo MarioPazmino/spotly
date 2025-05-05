@@ -1,6 +1,7 @@
 // src/infrastructure/repositories/canchasRepository.js
 const AWS = require('aws-sdk');
 const dynamoDB = new AWS.DynamoDB.DocumentClient();
+const Cancha = require('../../domain/entities/cancha');
 
 class CanchasRepository {
   constructor() {

@@ -449,13 +449,31 @@ resources:
             AttributeType: S
           - AttributeName: centroId
             AttributeType: S
+          - AttributeName: codigo
+            AttributeType: S
+          - AttributeName: fechaFin
+            AttributeType: S
         KeySchema:
           - AttributeName: cuponId
             KeyType: HASH
         GlobalSecondaryIndexes:
-          - IndexName: CentroIdIndex
+          - IndexName: CentroIdCodigoIndex
             KeySchema:
               - AttributeName: centroId
+                KeyType: HASH
+              - AttributeName: codigo
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: CodigoIndex
+            KeySchema:
+              - AttributeName: codigo
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: FechaFinIndex
+            KeySchema:
+              - AttributeName: fechaFin
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
