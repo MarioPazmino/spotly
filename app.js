@@ -8,6 +8,7 @@ const CanchasRepository = require('./src/infrastructure/repositories/canchasRepo
 const HorariosRepository = require('./src/infrastructure/repositories/horariosRepository');
 const ReservaRepository = require('./src/infrastructure/repositories/reservaRepository');
 const CuponDescuentoRepository = require('./src/infrastructure/repositories/cuponDescuentoRepository');
+const PagosRepository = require('./src/infrastructure/repositories/pagosRepository');
 const errorHandler = require('./src/interfaces/middlewares/errorHandler');
 const routes = require('./src/interfaces/http/routes');
 
@@ -35,6 +36,7 @@ const canchasRepository = new CanchasRepository();
 const horariosRepository = new HorariosRepository();
 const cuponDescuentoRepository = new CuponDescuentoRepository();
 const reservaRepository = new ReservaRepository();
+const pagosRepository = new PagosRepository();
 
 // Configuración de middlewares
 app.set('userRepository', userRepository);
@@ -43,6 +45,7 @@ app.set('canchasRepository', canchasRepository);
 app.set('horariosRepository', horariosRepository);
 app.set('cuponDescuentoRepository', cuponDescuentoRepository);
 app.set('reservaRepository', reservaRepository); 
+app.set('pagosRepository', pagosRepository); 
 
 app.use(cors({
   exposedHeaders: ['X-Access-Token'] // Permitir encabezados personalizados

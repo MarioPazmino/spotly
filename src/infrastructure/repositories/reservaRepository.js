@@ -11,6 +11,39 @@ class ReservaRepository {
   }
 
   async crearReserva(data) {
+    // Validar cupón si se aplica
+    if (data.codigoPromoAplicado) {
+      const CuponDescuentoRepository = require('./cuponDescuentoRepository');
+      const cuponRepo = new CuponDescuentoRepository();
+      const cupon = await cuponRepo.findByCodigo(data.codigoPromoAplicado);
+      if (!cupon) {
+        throw Boom.notFound('El cupón no existe.');
+      }
+      const hoy = new Date();
+      const inicio = new Date(cupon.fechaInicio);
+      const fin = new Date(cupon.fechaFin);
+      if (hoy < inicio || hoy > fin) {
+        throw Boom.badRequest('El cupón no está vigente.');
+      }
+    }
+
+    // Validar que los horarioIds no estén ocupados
+    const horariosRepository = require('./horariosRepository');
+    if (!Array.isArray(data.horarioIds) || data.horarioIds.length === 0) {
+      throw Boom.badRequest('La reserva debe incluir al menos un horario.');
+    }
+    // Buscar si alguno de los horarios ya está reservado
+    for (const horarioId of data.horarioIds) {
+      const horario = await horariosRepository.getById(horarioId);
+      if (!horario) {
+        throw Boom.notFound(`El horario ${horarioId} no existe.`);
+      }
+      // Considera ocupado si tiene reservaId asignado o estado Reservado/Pagado
+      if (horario.reservaId || ['Reservado', 'Pagado', 'Ocupado'].includes(horario.estado)) {
+        throw Boom.conflict(`El horario ${horarioId} ya está reservado u ocupado.`);
+      }
+    }
+
     const reservaId = data.reservaId || uuidv4();
     const fechaActual = new Date().toISOString();
     
@@ -97,6 +130,67 @@ class ReservaRepository {
   }
 
   async actualizarReserva(reservaId, datosActualizados) {
+    // Validar cupón si se aplica
+    if (datosActualizados.codigoPromoAplicado) {
+      const CuponDescuentoRepository = require('./cuponDescuentoRepository');
+      const cuponRepo = new CuponDescuentoRepository();
+      const cupon = await cuponRepo.findByCodigo(datosActualizados.codigoPromoAplicado);
+      if (!cupon) {
+        throw Boom.notFound('El cupón no existe.');
+      }
+      const hoy = new Date();
+      const inicio = new Date(cupon.fechaInicio);
+      const fin = new Date(cupon.fechaFin);
+      if (hoy < inicio || hoy > fin) {
+        throw Boom.badRequest('El cupón no está vigente.');
+      }
+    }
+
+    // Si se cambian los horarioIds, validar y actualizar horarios
+    const horariosRepository = require('./horariosRepository');
+    let horariosAntiguos = [];
+    if (datosActualizados.horarioIds && Array.isArray(datosActualizados.horarioIds)) {
+      // 1. Obtener la reserva actual para saber los horarios antiguos
+      const reservaActual = await this.obtenerReservaPorId(reservaId);
+      horariosAntiguos = Array.isArray(reservaActual.horarioIds) ? reservaActual.horarioIds : [];
+      // 2. Validar que los nuevos horarios estén libres
+      for (const horarioId of datosActualizados.horarioIds) {
+        const horario = await horariosRepository.getById(horarioId);
+        if (!horario) {
+          throw Boom.notFound(`El horario ${horarioId} no existe.`);
+        }
+        // Considera ocupado si tiene reservaId asignado o estado Reservado/Pagado/Ocupado, y no es de esta misma reserva
+        if ((horario.reservaId && horario.reservaId !== reservaId) || ['Reservado', 'Pagado', 'Ocupado'].includes(horario.estado)) {
+          throw Boom.conflict(`El horario ${horarioId} ya está reservado u ocupado.`);
+        }
+      }
+      // 3. Liberar horarios antiguos que ya no estén en la reserva
+      const aLiberar = horariosAntiguos.filter(h => !datosActualizados.horarioIds.includes(h));
+      for (const horarioId of aLiberar) {
+        await horariosRepository.update(horarioId, { reservaId: null, estado: 'Disponible' });
+      }
+      // 4. Asociar los nuevos horarios a la reserva
+      const aReservar = datosActualizados.horarioIds.filter(h => !horariosAntiguos.includes(h));
+      for (const horarioId of aReservar) {
+        await horariosRepository.update(horarioId, { reservaId, estado: 'Reservado' });
+      }
+    }
+
+    // Si se cambian los horarioIds, validar que los nuevos no estén ocupados
+    const horariosRepository = require('./horariosRepository');
+    if (datosActualizados.horarioIds && Array.isArray(datosActualizados.horarioIds)) {
+      for (const horarioId of datosActualizados.horarioIds) {
+        const horario = await horariosRepository.getById(horarioId);
+        if (!horario) {
+          throw Boom.notFound(`El horario ${horarioId} no existe.`);
+        }
+        // Considera ocupado si tiene reservaId asignado o estado Reservado/Pagado/Ocupado
+        if (horario.reservaId || ['Reservado', 'Pagado', 'Ocupado'].includes(horario.estado)) {
+          throw Boom.conflict(`El horario ${horarioId} ya está reservado u ocupado.`);
+        }
+      }
+    }
+
     try {
       // Primero obtenemos la reserva actual
       const reservaActual = await this.obtenerReservaPorId(reservaId);
