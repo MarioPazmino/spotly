@@ -20,6 +20,7 @@ custom:
     PAGOS_TABLE: Pagos${self:custom.tablePrefix}
     RESENAS_TABLE: Resenas${self:custom.tablePrefix}
     NOTIFICACIONES_TABLE: Notificaciones${self:custom.tablePrefix}
+    CUPONES_DESCUENTO_TABLE: CuponesDescuento${self:custom.tablePrefix}
     COGNITO_USER_POOL_ID: !Ref CognitoUserPool
     COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
     COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
@@ -88,9 +89,9 @@ provider:
             - !Join ["", [!GetAtt NotificacionesTable.Arn, "/index/ReceptorIndex"]]
             - !Join ["", [!GetAtt NotificacionesTable.Arn, "/index/EmisorIndex"]]
             # Recursos para tabla CuponDescuento
-            - !GetAtt CuponDescuentoTable.Arn
-            - !Join ["", [!GetAtt CuponDescuentoTable.Arn, "/*"]]
-            - !Join ["", [!GetAtt CuponDescuentoTable.Arn, "/index/CentroIdIndex"]]
+            - !GetAtt CuponesDescuentoTable.Arn
+            - !Join ["", [!GetAtt CuponesDescuentoTable.Arn, "/*"]]
+            - !Join ["", [!GetAtt CuponesDescuentoTable.Arn, "/index/CentroIdIndex"]]
 functions:
   api:
     handler: handler.api
@@ -276,6 +277,12 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
+          - IndexName: CanchaIdIndex
+            KeySchema:
+              - AttributeName: canchaId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
     HorariosTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -439,10 +446,10 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-    CuponDescuentoTable:
+    CuponesDescuentoTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: CuponDescuento${self:custom.tablePrefix}
+        TableName: CuponesDescuento${self:custom.tablePrefix}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: cuponId
@@ -456,7 +463,7 @@ resources:
         KeySchema:
           - AttributeName: cuponId
             KeyType: HASH
-        GlobalSecondaryIndexes:
+        GlobalSecondaryIndexes: 
           - IndexName: CentroIdCodigoIndex
             KeySchema:
               - AttributeName: centroId

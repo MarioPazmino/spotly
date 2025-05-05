@@ -5,12 +5,12 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient();
 
 class CentroDeportivoRepository {
   constructor() {
-    this.TABLE_NAME = process.env.CENTROS_DEPORTIVOS_TABLE;
+    this.CENTROS_DEPORTIVOS_TABLE = process.env.CENTROS_DEPORTIVOS_TABLE || 'CentrosDeportivos';
   }
 
   async save(centro) {
     const params = {
-      TableName: this.TABLE_NAME,
+      TableName: this.CENTROS_DEPORTIVOS_TABLE,
       Item: centro
     };
     await dynamoDB.put(params).promise();
@@ -19,7 +19,7 @@ class CentroDeportivoRepository {
 
   async findById(centroId) {
     const params = {
-      TableName: this.TABLE_NAME,
+      TableName: this.CENTROS_DEPORTIVOS_TABLE,
       Key: { centroId }
     };
     const result = await dynamoDB.get(params).promise();
@@ -38,7 +38,7 @@ class CentroDeportivoRepository {
       expressionAttributeNames[`#${key}`] = key;
     }
     const params = {
-      TableName: this.TABLE_NAME,
+      TableName: this.CENTROS_DEPORTIVOS_TABLE,
       Key: { centroId },
       UpdateExpression: `SET ${updateExpressionParts.join(', ')}`,
       ExpressionAttributeNames: expressionAttributeNames,
@@ -51,7 +51,7 @@ class CentroDeportivoRepository {
 
   async delete(centroId) {
     const params = {
-      TableName: this.TABLE_NAME,
+      TableName: this.CENTROS_DEPORTIVOS_TABLE,
       Key: { centroId }
     };
     await dynamoDB.delete(params).promise();
@@ -91,7 +91,7 @@ class CentroDeportivoRepository {
     if (canQueryByUserId || canQueryByUserIdEstado || canQueryByEstado || canQueryByNombre || canQueryByApertura || canQueryByCierre) {
       // Construir parámetros para query
       let params = {
-        TableName: this.TABLE_NAME,
+        TableName: this.CENTROS_DEPORTIVOS_TABLE,
         Limit: SCAN_BATCH_SIZE,
         ExclusiveStartKey: lastEvaluatedKey
       };

@@ -6,6 +6,8 @@ const UserRepository = require('./src/infrastructure/repositories/userRepository
 const CentroDeportivoRepository = require('./src/infrastructure/repositories/centroDeportivoRepository');
 const CanchasRepository = require('./src/infrastructure/repositories/canchasRepository');
 const HorariosRepository = require('./src/infrastructure/repositories/horariosRepository');
+const ReservaRepository = require('./src/infrastructure/repositories/reservaRepository');
+const CuponDescuentoRepository = require('./src/infrastructure/repositories/cuponDescuentoRepository');
 const errorHandler = require('./src/interfaces/middlewares/errorHandler');
 const routes = require('./src/interfaces/http/routes');
 
@@ -32,6 +34,7 @@ const centroDeportivoRepository = new CentroDeportivoRepository();
 const canchasRepository = new CanchasRepository();
 const horariosRepository = new HorariosRepository();
 const cuponDescuentoRepository = new CuponDescuentoRepository();
+const reservaRepository = new ReservaRepository();
 
 // Configuración de middlewares
 app.set('userRepository', userRepository);
@@ -39,7 +42,7 @@ app.set('centroDeportivoRepository', centroDeportivoRepository);
 app.set('canchasRepository', canchasRepository);
 app.set('horariosRepository', horariosRepository);
 app.set('cuponDescuentoRepository', cuponDescuentoRepository);
- 
+app.set('reservaRepository', reservaRepository); 
 
 app.use(cors({
   exposedHeaders: ['X-Access-Token'] // Permitir encabezados personalizados

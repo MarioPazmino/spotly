@@ -4,21 +4,25 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient();
 const CuponDescuento = require('../../domain/entities/cupon-descuento');
 const { DynamoDBClient, QueryCommand } = require('@aws-sdk/client-dynamodb');
 
-const TABLE_NAME = process.env.CUPONES_DESCUENTO_TABLE || 'CuponesDescuento';
+// Usar this.CUPONES_DESCUENTO_TABLE en la clase
+
 
 class CuponDescuentoRepository {
+  constructor() {
+    this.CUPONES_DESCUENTO_TABLE = process.env.CUPONES_DESCUENTO_TABLE || 'CuponesDescuento';
+  }
   async create(data) {
     const cupon = new CuponDescuento({ ...data, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-    await dynamoDB.put({ TableName: TABLE_NAME, Item: cupon }).promise();
+    await dynamoDB.put({ TableName: this.CUPONES_DESCUENTO_TABLE, Item: cupon }).promise();
     return cupon;
   }
   async getById(cuponId) {
-    const result = await dynamoDB.get({ TableName: TABLE_NAME, Key: { cuponId } }).promise();
+    const result = await dynamoDB.get({ TableName: this.CUPONES_DESCUENTO_TABLE, Key: { cuponId } }).promise();
     return result.Item ? new CuponDescuento(result.Item) : null;
   }
   async findByCodigo(codigo) {
     const params = {
-      TableName: TABLE_NAME,
+      TableName: this.CUPONES_DESCUENTO_TABLE,
       IndexName: 'CodigoIndex', // Debes tener un GSI en codigo
       KeyConditionExpression: 'codigo = :codigo',
       ExpressionAttributeValues: { ':codigo': codigo }
@@ -43,7 +47,7 @@ class CuponDescuentoRepository {
     updateExpr.push('#updatedAt = :updatedAt');
     exprAttrNames['#updatedAt'] = 'updatedAt';
     const params = {
-      TableName: TABLE_NAME,
+      TableName: this.CUPONES_DESCUENTO_TABLE,
       Key: { cuponId },
       UpdateExpression: 'SET ' + updateExpr.join(', '),
       ExpressionAttributeNames: exprAttrNames,
@@ -54,14 +58,14 @@ class CuponDescuentoRepository {
     return new CuponDescuento(result.Attributes);
   }
   async delete(cuponId) {
-    await dynamoDB.delete({ TableName: TABLE_NAME, Key: { cuponId } }).promise();
+    await dynamoDB.delete({ TableName: this.CUPONES_DESCUENTO_TABLE, Key: { cuponId } }).promise();
     return true;
   }
 
   // Buscar cupón por centroId y código usando el índice CentroIdCodigoIndex
   async findByCentroIdYCodigo(centroId, codigo) {
     const params = {
-      TableName: TABLE_NAME,
+      TableName: this.CUPONES_DESCUENTO_TABLE,
       IndexName: 'CentroIdCodigoIndex',
       KeyConditionExpression: 'centroId = :centroId AND codigo = :codigo',
       ExpressionAttributeValues: {
@@ -76,7 +80,7 @@ class CuponDescuentoRepository {
   // Descuenta un uso de forma atómica y segura
   async descontarUsoSeguro(cuponId) {
     const params = {
-      TableName: TABLE_NAME,
+      TableName: this.CUPONES_DESCUENTO_TABLE,
       Key: { cuponId },
       UpdateExpression: 'SET usosRestantes = usosRestantes - :uno',
       ConditionExpression: 'usosRestantes > :cero',
@@ -98,7 +102,7 @@ class CuponDescuentoRepository {
   // Obtener todos los cupones de un centro
   async findAllByCentroId(centroId, limit = 20, lastKey = undefined) {
     const params = {
-      TableName: TABLE_NAME,
+      TableName: this.CUPONES_DESCUENTO_TABLE,
       IndexName: 'CentroIdIndex', // Debes tener un GSI en centroId
       KeyConditionExpression: 'centroId = :centroId',
       ExpressionAttributeValues: { ':centroId': centroId },

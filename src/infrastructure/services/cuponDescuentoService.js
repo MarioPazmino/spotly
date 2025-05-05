@@ -83,26 +83,7 @@ class CuponDescuentoService {
     return this.repo.update(cuponId, updates);
   }
 
-  // Aplica un cupón por código y actualiza usosRestantes
-  async applyCoupon(codigo) {
-    const cupon = await this.repo.findByCodigo(codigo);
-    if (!cupon) throw new Error('Cupón no encontrado');
-    // Validar rango de fechas
-    const { fechaInicio, fechaFin } = cupon;
-    const hoy = new Date();
-    const inicio = new Date(fechaInicio);
-    const fin = new Date(fechaFin);
-    if (hoy < inicio || hoy > fin) {
-      throw new Error('El cupón no está vigente en la fecha actual');
-    }
-    if (cupon.usosRestantes !== undefined && cupon.usosRestantes <= 0) {
-      throw new Error('El cupón ya no tiene usos disponibles');
-    }
-    // Actualiza usosRestantes
-    const nuevosUsos = cupon.usosRestantes !== undefined ? cupon.usosRestantes - 1 : undefined;
-    const actualizado = await this.repo.update(cupon.cuponId, { usosRestantes: nuevosUsos });
-    return actualizado;
-  }
+
   async delete(cuponId) {
     return this.repo.delete(cuponId);
   }

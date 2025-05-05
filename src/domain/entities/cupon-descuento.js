@@ -1,5 +1,5 @@
 // src/domain/entities/cupon-descuento.js
-class CuponDescuento {
+class CuponesDescuento {
     constructor({
       cuponId, // ID único del cupón
       centroId, // ID del centro que creó el cupón
@@ -8,8 +8,7 @@ class CuponDescuento {
       valor, // Valor del descuento (ej.: 10% o $5)
       fechaInicio, // Fecha de inicio de validez (formato ISO: '2025-04-01T09:00Z')
       fechaFin,    // Fecha de fin de validez (formato ISO: '2025-04-07T23:59Z')
-      maximoUsos, // Número máximo de veces que se puede usar
-      usosRestantes, // Número de usos restantes
+      maximoUsos, // Número máximo de veces que puede usar CADA USUARIO
       createdAt, // Fecha de creación
       updatedAt // Fecha de última actualización
     }) {
@@ -24,11 +23,17 @@ class CuponDescuento {
         throw new Error('maximoUsos debe ser un entero mayor o igual a 1');
       }
       this.maximoUsos = maximoUsos;
-      this.usosRestantes = (usosRestantes !== undefined && usosRestantes !== null)
-        ? usosRestantes
-        : maximoUsos; // Siempre igual a maximoUsos si no se provee
       this.createdAt = createdAt || new Date().toISOString();
       this.updatedAt = updatedAt || new Date().toISOString();
     }
+
+    calcularDescuento(total) {
+      if (this.tipoDescuento === 'porcentaje') {
+        return Math.round((total * this.valor) / 100);
+      } else if (this.tipoDescuento === 'monto_fijo') {
+        return this.valor;
+      }
+      return 0;
+    }
   }
-  module.exports = CuponDescuento;
+  module.exports = CuponesDescuento;

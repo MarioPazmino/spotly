@@ -5,12 +5,12 @@ const Cancha = require('../../domain/entities/cancha');
 
 class CanchasRepository {
   constructor() {
-    this.TABLE_NAME = process.env.CANCHAS_TABLE || 'Canchas';
+    this.CANCHAS_TABLE = process.env.CANCHAS_TABLE || 'Canchas';
   }
 
   async save(cancha) {
     const params = {
-      TableName: this.TABLE_NAME,
+      TableName: this.CANCHAS_TABLE,
       Item: cancha
     };
     await dynamoDB.put(params).promise();
@@ -19,7 +19,7 @@ class CanchasRepository {
 
   async findById(canchaId) {
     const params = {
-      TableName: this.TABLE_NAME,
+      TableName: this.CANCHAS_TABLE,
       Key: { canchaId }
     };
     const result = await dynamoDB.get(params).promise();
@@ -36,7 +36,7 @@ class CanchasRepository {
       ExpressionAttributeValues[`:${key}`] = updateData[key];
     }
     const params = {
-      TableName: this.TABLE_NAME,
+      TableName: this.CANCHAS_TABLE,
       Key: { canchaId },
       UpdateExpression: 'SET ' + updateExpression.join(', '),
       ExpressionAttributeNames,
@@ -49,7 +49,7 @@ class CanchasRepository {
 
   async delete(canchaId) {
     const params = {
-      TableName: this.TABLE_NAME,
+      TableName: this.CANCHAS_TABLE,
       Key: { canchaId }
     };
     await dynamoDB.delete(params).promise();
@@ -58,7 +58,7 @@ class CanchasRepository {
 
   async findAllByCentro(centroId, options = {}) {
     const params = {
-      TableName: this.TABLE_NAME,
+      TableName: this.CANCHAS_TABLE,
       IndexName: 'CentroIdIndex',
       KeyConditionExpression: 'centroId = :centroId',
       ExpressionAttributeValues: {

@@ -23,6 +23,9 @@ class Reserva {
     if (!Array.isArray(horarioIds) || horarioIds.length === 0) {
       throw new Error('La reserva debe incluir al menos un horario');
     }
+    if (horarioIds.length > 12) {
+      throw new Error('No puedes reservar más de 12 horarios en una sola reserva');
+    }
 
     this.reservaId = reservaId;
     this.userId = userId;

@@ -36,7 +36,7 @@ function sanitizeObject(obj) {
   } else if (obj && typeof obj === 'object') {
     const clean = {};
     for (const key in obj) {
-      if (key === 'descripcion') {
+      if (key === 'descripcion' || key === 'notas') {
         clean[key] = sanitizeDescripcion(obj[key]);
       } else {
         clean[key] = sanitizeObject(obj[key]);

@@ -13,7 +13,7 @@ v1.use('/centros-deportivos', require('./v1/centroDeportivoRoutes'));
 v1.use('/canchas', require('./v1/canchasRoutes'));
 v1.use('/horarios', require('./v1/horariosRoutes'));
 v1.use('/cupones-descuento', require('./v1/cuponDescuentoRoutes'));
-v1.use('/reservas', require('./v1/reservasRoutes'));
+v1.use('/reservas', require('./v1/reservaRoutes'));
 v1.use('/pagos', require('./v1/pagosRoutes'));
 
 module.exports = router;

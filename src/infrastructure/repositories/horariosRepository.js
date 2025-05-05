@@ -3,8 +3,10 @@ const { DynamoDBClient, PutItemCommand, GetItemCommand, QueryCommand, UpdateItem
 const { unmarshall, marshall } = require('@aws-sdk/util-dynamodb');
 const Horario = require('../../domain/entities/horarios');
 
-const TABLE_NAME = process.env.SCHEDULES_TABLE || 'Horarios-dev';
+
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
+
+const getSchedulesTable = () => process.env.SCHEDULES_TABLE || 'Horarios-dev';
 
 function normalizarHoraRepo(hora) {
   if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(hora)) return hora;
@@ -22,7 +24,7 @@ module.exports = {
     if (horarioData.horaFin) horarioData.horaFin = normalizarHoraRepo(horarioData.horaFin);
     const horario = new Horario(horarioData); // Valida datos
     const params = {
-      TableName: TABLE_NAME,
+      TableName: getSchedulesTable(),
       Item: marshall(horario)
     };
     await client.send(new PutItemCommand(params));
@@ -34,7 +36,7 @@ module.exports = {
    */
   async getById(horarioId) {
     const params = {
-      TableName: TABLE_NAME,
+      TableName: getSchedulesTable(),
       Key: marshall({ horarioId })
     };
     const result = await client.send(new GetItemCommand(params));
@@ -47,7 +49,7 @@ module.exports = {
    */
   async listByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin, limit = 20, exclusiveStartKey = null, estado = null) {
     const params = {
-      TableName: TABLE_NAME,
+      TableName: getSchedulesTable(),
       IndexName: 'CanchaFechaIndex',
       KeyConditionExpression: 'canchaId = :canchaId AND fecha BETWEEN :fechaInicio AND :fechaFin',
       ExpressionAttributeValues: {
@@ -69,7 +71,7 @@ module.exports = {
 
   async listByCanchaAndFecha(canchaId, fecha, limit = 20, exclusiveStartKey = null, estado = null) {
     const params = {
-      TableName: TABLE_NAME,
+      TableName: getSchedulesTable(),
       IndexName: 'CanchaFechaIndex',
       KeyConditionExpression: 'canchaId = :canchaId and fecha = :fecha',
       ExpressionAttributeValues: {
@@ -93,7 +95,7 @@ module.exports = {
    */
   async listByReservaId(reservaId, limit = 20, exclusiveStartKey = null, estado = null) {
     const params = {
-      TableName: TABLE_NAME,
+      TableName: getSchedulesTable(),
       IndexName: 'ReservaIdIndex',
       KeyConditionExpression: 'reservaId = :reservaId',
       ExpressionAttributeValues: {
@@ -133,7 +135,7 @@ async update(horarioId, updates) {
   }
   if (updateExpr.length === 0) throw new Error('Nada para actualizar');
   const params = {
-    TableName: TABLE_NAME,
+    TableName: getSchedulesTable(),
     Key: marshall({ horarioId }),
     UpdateExpression: 'SET ' + updateExpr.join(', '),
     ExpressionAttributeNames: exprAttrNames,
@@ -185,7 +187,7 @@ async update(horarioId, updates) {
 
   async delete(horarioId) {
     const params = {
-      TableName: TABLE_NAME,
+      TableName: getSchedulesTable(),
       Key: marshall({ horarioId })
     };
     await client.send(new DeleteItemCommand(params));
