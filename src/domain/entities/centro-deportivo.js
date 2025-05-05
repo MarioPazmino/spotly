@@ -32,8 +32,9 @@ class CentroDeportivo {
     this.telefonoPrincipal = telefonoPrincipal;
     this.telefonoSecundario = telefonoSecundario || null; // Opcional, null por defecto
     // --- NUEVOS CAMPOS AUXILIARES PARA FILTRO DE HORARIO ---
-    this.horaAperturaMinima = horaAperturaMinima || null;
-    this.horaCierreMaxima = horaCierreMaxima || null;
+    // Forzar formato HH:mm (sin segundos)
+    this.horaAperturaMinima = (typeof horaAperturaMinima === 'string' && horaAperturaMinima.length === 5) ? horaAperturaMinima : null;
+    this.horaCierreMaxima = (typeof horaCierreMaxima === 'string' && horaCierreMaxima.length === 5) ? horaCierreMaxima : null;
     this.userId = userId;
     // --- HORARIO FLEXIBLE POR DÍA ---
     this.horario = horario || [];

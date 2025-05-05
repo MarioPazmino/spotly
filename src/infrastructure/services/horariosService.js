@@ -1,5 +1,6 @@
 // src/infrastructure/services/horariosService.js
 const horariosRepository = require('../repositories/horariosRepository');
+const { normalizarFechaHoraGuayaquil, formatearHoraGuayaquil, ZONA_GUAYAQUIL } = require('../../utils/fechas');
 
 class HorariosService {
   constructor(repo = horariosRepository) {
@@ -7,37 +8,70 @@ class HorariosService {
   }
 
   async getById(horarioId) {
-    return this.repo.getById(horarioId);
+    const horario = await this.repo.getById(horarioId);
+    if (!horario) return null;
+    // Normaliza las horas a zona Guayaquil
+    horario.horaInicio = formatearHoraGuayaquil(normalizarFechaHoraGuayaquil(horario.fecha, horario.horaInicio));
+    horario.horaFin = formatearHoraGuayaquil(normalizarFechaHoraGuayaquil(horario.fecha, horario.horaFin));
+    return horario;
   }
 
   /**
    * Lista horarios por cancha y rango de fechas, paginado
    */
   async listByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin, limit = 20, exclusiveStartKey = null, estado = null) {
-    return this.repo.listByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin, limit, exclusiveStartKey, estado);
+    const result = await this.repo.listByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin, limit, exclusiveStartKey, estado);
+    // Normaliza las horas a zona Guayaquil
+    result.items = result.items.map(horario => {
+      horario.horaInicio = formatearHoraGuayaquil(normalizarFechaHoraGuayaquil(horario.fecha, horario.horaInicio));
+      horario.horaFin = formatearHoraGuayaquil(normalizarFechaHoraGuayaquil(horario.fecha, horario.horaFin));
+      return horario;
+    });
+    return result;
   }
 
   /**
    * Lista horarios por cancha y fecha, paginado
    */
-  async listByCanchaAndFecha(canchaId, fecha, limit = 20, exclusiveStartKey = null) {
-    return this.repo.listByCanchaAndFecha(canchaId, fecha, limit, exclusiveStartKey);
+  async listByCanchaAndFecha(canchaId, fecha, limit = 20, exclusiveStartKey = null, estado = null) {
+    const result = await this.repo.listByCanchaAndFecha(canchaId, fecha, limit, exclusiveStartKey, estado);
+    // Normaliza las horas a zona Guayaquil
+    result.items = result.items.map(horario => {
+      horario.horaInicio = formatearHoraGuayaquil(normalizarFechaHoraGuayaquil(horario.fecha, horario.horaInicio));
+      horario.horaFin = formatearHoraGuayaquil(normalizarFechaHoraGuayaquil(horario.fecha, horario.horaFin));
+      return horario;
+    });
+    return result;
   }
 
   /**
    * Lista horarios por reservaId, paginado
    */
-  async listByReservaId(reservaId, limit = 20, exclusiveStartKey = null) {
-    return this.repo.listByReservaId(reservaId, limit, exclusiveStartKey);
+  async listByReservaId(reservaId, limit = 20, exclusiveStartKey = null, estado = null) {
+    const result = await this.repo.listByReservaId(reservaId, limit, exclusiveStartKey, estado);
+    // Normaliza las horas a zona Guayaquil
+    result.items = result.items.map(horario => {
+      horario.horaInicio = formatearHoraGuayaquil(normalizarFechaHoraGuayaquil(horario.fecha, horario.horaInicio));
+      horario.horaFin = formatearHoraGuayaquil(normalizarFechaHoraGuayaquil(horario.fecha, horario.horaFin));
+      return horario;
+    });
+    return result;
   }
 
   /**
    * Crea un horario validando solapamientos
    */
   async create(data) {
-    const { canchaId, fecha, horaInicio, horaFin } = data;
+    let { canchaId, fecha, horaInicio, horaFin } = data;
+    // Normalizar a zona Guayaquil (por si el frontend envía otra zona)
+    const inicioUTC = normalizarFechaHoraGuayaquil(fecha, horaInicio);
+    const finUTC = normalizarFechaHoraGuayaquil(fecha, horaFin);
+    // Guardar siempre en formato HH:mm (hora local Guayaquil)
+    horaInicio = formatearHoraGuayaquil(inicioUTC);
+    horaFin = formatearHoraGuayaquil(finUTC);
+    fecha = format(utcToZonedTime(inicioUTC, ZONA_GUAYAQUIL), 'yyyy-MM-dd', { timeZone: ZONA_GUAYAQUIL });
+    // Validar solapamiento
     const existentes = await this.repo.listByCanchaAndFecha(canchaId, fecha);
-    // Verificar solapamiento
     for (const h of existentes) {
       if (
         (horaInicio < h.horaFin && horaFin > h.horaInicio)
@@ -45,7 +79,8 @@ class HorariosService {
         throw new Error('El horario se solapa con otro existente: ' + h.horaInicio + '-' + h.horaFin);
       }
     }
-    return this.repo.create(data);
+    // Guardar datos normalizados
+    return this.repo.create({ ...data, fecha, horaInicio, horaFin });
   }
 
   /**
@@ -113,13 +148,66 @@ class HorariosService {
         }
       }
     }
-    // Si todo OK, crear todos
-    const creados = [];
-    for (const h of horariosArray) {
-      const creado = await this.repo.create(h);
-      creados.push(creado);
+    // 3. Validar duplicados exactos (canchaId, fecha, horaInicio, horaFin)
+    const existentesPorCanchaFecha = {};
+    for (const key of Object.keys(agrupados)) {
+      const [canchaId, fecha] = key.split('|');
+      if (!existentesPorCanchaFecha[key]) {
+        existentesPorCanchaFecha[key] = await this.repo.listByCanchaAndFecha(canchaId, fecha);
+      }
     }
-    return creados;
+    // Si todo OK, crear todos (evitando duplicados exactos)
+    const creados = [];
+    const duplicados = [];
+    for (const h of horariosArray) {
+      const key = `${h.canchaId}|${h.fecha}`;
+      const existentes = existentesPorCanchaFecha[key] || [];
+      const yaExiste = existentes.some(ex =>
+        ex.horaInicio === h.horaInicio &&
+        ex.horaFin === h.horaFin &&
+        ex.canchaId === h.canchaId &&
+        ex.fecha === h.fecha
+      );
+      if (!yaExiste) {
+        const creado = await this.repo.create(h);
+        creados.push(creado);
+      } else {
+        duplicados.push(h);
+      }
+    }
+    return { creados, duplicados };
+
+  }
+
+  /**
+   * Actualiza múltiples horarios a la vez
+   * @param {Array} updatesArray [{horarioId, ...camposAActualizar}]
+   */
+  async bulkUpdate(updatesArray) {}
+
+  /**
+   * Elimina todos los horarios de una cancha en un rango de fechas
+   * @param {string} canchaId
+   * @param {string} fechaInicio
+   * @param {string} fechaFin
+   * @returns {Promise<Array>} Array de horarioIds eliminados
+   */
+  async deleteByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin) {
+    return await this.repo.deleteByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin);
+  }
+
+  async bulkUpdate(updatesArray) {
+    if (!Array.isArray(updatesArray) || updatesArray.length === 0) {
+      throw new Error('Debe enviar un array de actualizaciones');
+    }
+    const actualizados = [];
+    for (const upd of updatesArray) {
+      if (!upd.horarioId) throw new Error('Falta horarioId en una actualización');
+      // Puedes agregar validaciones de solapamiento si es necesario
+      const actualizado = await this.repo.update(upd.horarioId, upd);
+      actualizados.push(actualizado);
+    }
+    return actualizados;
   }
 }
 

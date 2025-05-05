@@ -49,12 +49,44 @@ class HorariosController {
       if (errores.length > 0) {
         return res.status(400).json({ error: 'Errores de validación en horarios', detalles: errores });
       }
-      const result = await this.horariosService.bulkCreate(horarios);
-      res.status(201).json(result);
+      // El service ahora retorna {creados, duplicados}
+      const { creados, duplicados } = await this.horariosService.bulkCreate(horarios);
+      res.status(201).json({ creados, duplicados });
     } catch (err) {
       next(err);
     }
   }
+
+  // PATCH /api/v1/horarios/bulk
+  async bulkUpdate(req, res, next) {
+    try {
+      const updates = req.body.updates;
+      if (!Array.isArray(updates) || updates.length === 0) {
+        return res.status(400).json({ error: 'Debe enviar un array de actualizaciones' });
+      }
+      const actualizados = await this.horariosService.bulkUpdate(updates);
+      res.status(200).json({ actualizados });
+    } catch (err) {
+      next(err);
+    }
+  }
+  /**
+   * DELETE /api/v1/horarios/rango-fechas?canchaId=...&fechaInicio=...&fechaFin=...
+   * Elimina todos los horarios de una cancha en un rango de fechas
+   */
+  async deleteByCanchaAndRangoFechas(req, res, next) {
+    try {
+      const { canchaId, fechaInicio, fechaFin } = req.query;
+      if (!canchaId || !fechaInicio || !fechaFin) {
+        return res.status(400).json({ error: 'canchaId, fechaInicio y fechaFin son requeridos' });
+      }
+      const eliminados = await this.horariosService.deleteByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin);
+      res.status(200).json({ eliminados });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   constructor({ horariosService }) {
     this.horariosService = horariosService;
   }
@@ -71,18 +103,30 @@ class HorariosController {
   // GET /api/v1/horarios?canchaId=...&fecha=...
   async listByCanchaAndFecha(req, res, next) {
     try {
-      const { canchaId, fecha } = req.query;
+      const { canchaId, fecha, limit, exclusiveStartKey, estado } = req.query;
       if (!canchaId || !fecha) return res.status(400).json({ message: 'canchaId y fecha son requeridos' });
-      const horarios = await this.horariosService.listByCanchaAndFecha(canchaId, fecha);
-      res.json(horarios);
+      const result = await this.horariosService.listByCanchaAndFecha(
+        canchaId,
+        fecha,
+        limit ? parseInt(limit) : 20,
+        exclusiveStartKey ? JSON.parse(exclusiveStartKey) : null,
+        estado || null
+      );
+      res.json(result);
     } catch (err) { next(err); }
   }
 
   // GET /api/v1/horarios/by-reserva/:reservaId
   async listByReservaId(req, res, next) {
     try {
-      const horarios = await this.horariosService.listByReservaId(req.params.reservaId);
-      res.json(horarios);
+      const { limit, exclusiveStartKey, estado } = req.query;
+      const result = await this.horariosService.listByReservaId(
+        req.params.reservaId,
+        limit ? parseInt(limit) : 20,
+        exclusiveStartKey ? JSON.parse(exclusiveStartKey) : null,
+        estado || null
+      );
+      res.json(result);
     } catch (err) { next(err); }
   }
 

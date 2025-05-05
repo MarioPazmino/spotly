@@ -7,16 +7,31 @@ const auth = require('../../../middlewares/CognitoAuthMiddleware').authenticate(
 const authorization = require('../../../middlewares/authorization');
 
 const controller = new HorariosController({ horariosService });
+
+// Middleware inline para validar UUID (copiado de centroDeportivoRoutes.js)
+const { validate: isUuid } = require('uuid');
+function validateUUID(paramName) {
+  return (req, res, next) => {
+    const value = req.params[paramName];
+    if (!isUuid(value)) {
+      return res.status(400).json({
+        message: `El parámetro ${paramName} debe ser un UUID válido.`
+      });
+    }
+    next();
+  };
+}
+
 const router = express.Router();
 
 // GET /api/v1/horarios/:id
-router.get('/:id', (req, res, next) => controller.getById(req, res, next));
+router.get('/:id', validateUUID('id'), (req, res, next) => controller.getById(req, res, next));
 
 // GET /api/v1/horarios?canchaId=...&fecha=...
 router.get('/', (req, res, next) => controller.listByCanchaAndFecha(req, res, next));
 
 // GET /api/v1/horarios/by-reserva/:reservaId
-router.get('/by-reserva/:reservaId', (req, res, next) => controller.listByReservaId(req, res, next));
+router.get('/by-reserva/:reservaId', validateUUID('reservaId'), (req, res, next) => controller.listByReservaId(req, res, next));
 
 // POST /api/v1/horarios
 router.post('/', auth, (req, res, next) => {
@@ -42,7 +57,7 @@ router.post('/bulk', auth, (req, res, next) => {
 router.get('/rango-fechas', (req, res, next) => controller.listByCanchaAndRangoFechas(req, res, next));
 
 // PATCH /api/v1/horarios/:id
-router.patch('/:id', auth, (req, res, next) => {
+router.patch('/:id', validateUUID('id'), auth, (req, res, next) => {
   try {
     authorization.checkPermission('update:horarios')(req.user.groups);
     next();
@@ -52,7 +67,7 @@ router.patch('/:id', auth, (req, res, next) => {
 }, validarHorario, (req, res, next) => controller.update(req, res, next));
 
 // DELETE /api/v1/horarios/:id
-router.delete('/:id', auth, (req, res, next) => {
+router.delete('/:id', validateUUID('id'), auth, (req, res, next) => {
   try {
     authorization.checkPermission('delete:horarios')(req.user.groups);
     next();

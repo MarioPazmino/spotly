@@ -4,8 +4,8 @@ class Horario {
     horarioId, // Identificador único del horario
     canchaId, // ID de la cancha asociada (FK)
     fecha, // Fecha disponible (formato YYYY-MM-DD)
-    horaInicio, // Hora de inicio del bloque (formato HH:MM:SS)
-    horaFin, // Hora de fin del bloque (formato HH:MM:SS)
+    horaInicio, // Hora de inicio del bloque (formato HH:MM)
+    horaFin, // Hora de fin del bloque (formato HH:MM)
     estado, // Estado: "Disponible" o "Reservado"
     reservaId, // ID de la reserva asociada (FK opcional)
     createdAt, // Fecha de creación del registro

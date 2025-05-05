@@ -71,8 +71,10 @@ class CentroDeportivoService {
     function calcularHorasMinMax(horario) {
       if (!Array.isArray(horario) || horario.length === 0) return { horaAperturaMinima: null, horaCierreMaxima: null };
       // Asume formato 'HH:mm' y ordena correctamente
-      const horasApertura = horario.map(h => h.abre).sort();
-      const horasCierre = horario.map(h => h.cierra).sort();
+      // Forzar a HH:mm si por error viene con segundos
+      const normalizar = hora => typeof hora === 'string' ? hora.slice(0,5) : hora;
+      const horasApertura = horario.map(h => normalizar(h.abre)).sort();
+      const horasCierre = horario.map(h => normalizar(h.cierra)).sort();
       return {
         horaAperturaMinima: horasApertura[0],
         horaCierreMaxima: horasCierre[horasCierre.length - 1]
@@ -83,6 +85,9 @@ class CentroDeportivoService {
     const { horaAperturaMinima, horaCierreMaxima } = calcularHorasMinMax(horario);
     cleanData.horaAperturaMinima = horaAperturaMinima;
     cleanData.horaCierreMaxima = horaCierreMaxima;
+    // Forzar formato HH:mm en los campos auxiliares
+    if (typeof cleanData.horaAperturaMinima === 'string') cleanData.horaAperturaMinima = cleanData.horaAperturaMinima.slice(0,5);
+    if (typeof cleanData.horaCierreMaxima === 'string') cleanData.horaCierreMaxima = cleanData.horaCierreMaxima.slice(0,5);
 
     // Crear un centro deportivo con ID único
     const centro = new CentroDeportivo({
