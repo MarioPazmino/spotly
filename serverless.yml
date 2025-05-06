@@ -19,7 +19,6 @@ custom:
     SCHEDULES_TABLE: Horarios${self:custom.tablePrefix}
     PAGOS_TABLE: Pagos${self:custom.tablePrefix}
     RESENAS_TABLE: Resenas${self:custom.tablePrefix}
-    NOTIFICACIONES_TABLE: Notificaciones${self:custom.tablePrefix}
     CUPONES_DESCUENTO_TABLE: CuponesDescuento${self:custom.tablePrefix}
     COGNITO_USER_POOL_ID: !Ref CognitoUserPool
     COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
@@ -34,24 +33,26 @@ provider:
   name: aws
   runtime: nodejs18.x
   region: us-east-1
-  environment: ${self:custom.commonEnvVars}
+  environment:
+    DYNAMODB_TABLE: ${self:service}-${self:provider.stage}-resenas
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
+    NOTIFICATIONS_TOPIC_ARN: !Ref NotificationsTopic
   iam:
     role:
       statements:
         - Effect: Allow
           Action:
-            - dynamodb:PutItem
             - dynamodb:Query
             - dynamodb:Scan
-            - dynamodb:DeleteItem
-            - dynamodb:UpdateItem
             - dynamodb:GetItem
-          Resource:
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: 
             # Recursos para tabla CentrosDeportivos
             - !GetAtt CentrosDeportivosTable.Arn
             - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/*"]]
             - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/index/UserIdIndex"]]
-            - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/index/CedulaJuridicaIndex"]]
             - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/index/HoraAperturaMinimaIndex"]]
             - !Join ["", [!GetAtt CentrosDeportivosTable.Arn, "/index/HoraCierreMaximaIndex"]]
             # Recursos para tabla Canchas
@@ -80,20 +81,23 @@ provider:
             - !Join ["", [!GetAtt PagosTable.Arn, "/index/TransactionIdIndex"]]
             # Recursos para tabla Reseñas
             - !GetAtt ResenasTable.Arn
-            - !Join ["", [!GetAtt ResenasTable.Arn, "/*"]]
-            - !Join ["", [!GetAtt ResenasTable.Arn, "/index/UserIndex"]]
-            - !Join ["", [!GetAtt ResenasTable.Arn, "/index/CanchaIndex"]]
-            - !Join ["", [!GetAtt ResenasTable.Arn, "/index/CentroDeportivoIndex"]]
-            - !Join ["", [!GetAtt ResenasTable.Arn, "/index/ReservaIndex"]]
-            # Recursos para tabla Notificaciones
-            - !GetAtt NotificacionesTable.Arn
-            - !Join ["", [!GetAtt NotificacionesTable.Arn, "/*"]]
-            - !Join ["", [!GetAtt NotificacionesTable.Arn, "/index/ReceptorIndex"]]
-            - !Join ["", [!GetAtt NotificacionesTable.Arn, "/index/EmisorIndex"]]
+            - !Join ["", [!GetAtt ResenasTable.Arn, "/index/*"]]
             # Recursos para tabla CuponDescuento
             - !GetAtt CuponesDescuentoTable.Arn
             - !Join ["", [!GetAtt CuponesDescuentoTable.Arn, "/*"]]
             - !Join ["", [!GetAtt CuponesDescuentoTable.Arn, "/index/CentroIdIndex"]]
+        - Effect: Allow
+          Action:
+            - sns:Publish
+            - sns:Subscribe
+            - sns:Unsubscribe
+            - sns:CreateTopic
+            - sns:DeleteTopic
+            - sns:SetTopicAttributes
+            - sns:GetTopicAttributes
+            - sns:ListSubscriptionsByTopic
+          Resource: !Ref NotificationsTopic
+
 functions:
   api:
     handler: handler.api
@@ -114,6 +118,7 @@ functions:
       - schedule:
           rate: cron(0 3 1 * ? *) # Ejecuta el día 1 de cada mes a las 03:00 UTC
           enabled: true
+
 resources:
   Resources:
     #======================================================================================#
@@ -193,8 +198,6 @@ resources:
             AttributeType: S
           - AttributeName: userId
             AttributeType: S
-          - AttributeName: cedulaJuridica
-            AttributeType: S
           - AttributeName: horaAperturaMinima
             AttributeType: S
           - AttributeName: horaCierreMaxima
@@ -206,12 +209,6 @@ resources:
           - IndexName: UserIdIndex
             KeySchema:
               - AttributeName: userId
-                KeyType: HASH
-            Projection:
-              ProjectionType: ALL
-          - IndexName: CedulaJuridicaIndex
-            KeySchema:
-              - AttributeName: cedulaJuridica
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
@@ -394,8 +391,7 @@ resources:
     ResenasTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: Resenas${self:custom.tablePrefix}
-        BillingMode: PAY_PER_REQUEST
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}
         AttributeDefinitions:
           - AttributeName: resenaId
             AttributeType: S
@@ -403,67 +399,48 @@ resources:
             AttributeType: S
           - AttributeName: canchaId
             AttributeType: S
-          - AttributeName: centroDeportivoId
+          - AttributeName: centroId
             AttributeType: S
-          - AttributeName: reservaId
+          - AttributeName: userCanchaId
+            AttributeType: S
+          - AttributeName: userCentroId
             AttributeType: S
         KeySchema:
           - AttributeName: resenaId
             KeyType: HASH
         GlobalSecondaryIndexes:
-          - IndexName: UserIndex
+          - IndexName: UserIdIndex
             KeySchema:
               - AttributeName: userId
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-          - IndexName: CanchaIndex
+          - IndexName: CanchaIdIndex
             KeySchema:
               - AttributeName: canchaId
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-          - IndexName: CentroDeportivoIndex
+          - IndexName: CentroIdIndex
             KeySchema:
-              - AttributeName: centroDeportivoId
+              - AttributeName: centroId
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-          - IndexName: ReservaIndex
+          - IndexName: UserCanchaIndex
             KeySchema:
-              - AttributeName: reservaId
+              - AttributeName: userCanchaId
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-    # Tabla para Notificaciones
-    NotificacionesTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: Notificaciones${self:custom.tablePrefix}
+          - IndexName: UserCentroIndex
+            KeySchema:
+              - AttributeName: userCentroId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
         BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: notificacionId
-            AttributeType: S
-          - AttributeName: receptorId
-            AttributeType: S
-          - AttributeName: emisorId
-            AttributeType: S
-        KeySchema:
-          - AttributeName: notificacionId
-            KeyType: HASH
-        GlobalSecondaryIndexes:
-          - IndexName: ReceptorIndex
-            KeySchema:
-              - AttributeName: receptorId
-                KeyType: HASH
-            Projection:
-              ProjectionType: ALL
-          - IndexName: EmisorIndex
-            KeySchema:
-              - AttributeName: emisorId
-                KeyType: HASH
-            Projection:
-              ProjectionType: ALL
+    # Tabla para CuponDescuento
     CuponesDescuentoTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -879,6 +856,75 @@ resources:
                     - cognito-idp:AdminAddUserToGroup
                     - cognito-idp:AdminGetUser
                   Resource: !GetAtt CognitoUserPool.Arn
+    # SNS Topic para notificaciones
+    NotificationsTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: ${self:service}-notifications-${self:custom.stage}
+        DisplayName: Spotly Notifications
+        KmsMasterKeyId: alias/aws/sns
+
+    # Política de acceso para el topic
+    NotificationsTopicPolicy:
+      Type: AWS::SNS::TopicPolicy
+      Properties:
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: sns.amazonaws.com
+              Action:
+                - sns:Publish
+              Resource: !Ref NotificationsTopic
+        Topics:
+          - !Ref NotificationsTopic
+
+    # Suscripción para notificaciones push (ejemplo)
+    PushNotificationsSubscription:
+      Type: AWS::SNS::Subscription
+      Properties:
+        Protocol: application
+        Endpoint: !GetAtt PushNotificationsEndpoint.Arn
+        TopicArn: !Ref NotificationsTopic
+
+    # Lambda para manejar notificaciones push
+    PushNotificationsEndpoint:
+      Type: AWS::Lambda::Function
+      Properties:
+        Handler: src/notifications/pushHandler.handler
+        Runtime: nodejs18.x
+        Role: !GetAtt NotificationsLambdaRole.Arn
+        Environment:
+          Variables:
+            STAGE: ${self:custom.stage}
+        Events:
+          - SNS:
+              TopicArn: !Ref NotificationsTopic
+
+    # Rol IAM para la función Lambda de notificaciones
+    NotificationsLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          - PolicyName: SNSPublish
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - sns:Publish
+                  Resource: !Ref NotificationsTopic
+
 # Outputs para fácil referencia de recursos importantes
 Outputs:
   UserPoolId:
@@ -896,3 +942,9 @@ Outputs:
   CustomDomainEndpoint:
     Value: !Sub https://api.${self:custom.domain}
     Description: URL personalizada para la API
+  NotificationsTopicArn:
+    Description: ARN del topic de SNS para notificaciones
+    Value: !Ref NotificationsTopic
+  NotificationsTopicName:
+    Description: Nombre del topic de SNS para notificaciones
+    Value: !GetAtt NotificationsTopic.TopicName

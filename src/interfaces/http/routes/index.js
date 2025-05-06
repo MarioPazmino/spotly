@@ -15,5 +15,6 @@ v1.use('/horarios', require('./v1/horariosRoutes'));
 v1.use('/cupones-descuento', require('./v1/cuponDescuentoRoutes'));
 v1.use('/reservas', require('./v1/reservaRoutes'));
 v1.use('/pagos', require('./v1/pagosRoutes'));
+v1.use('/resenas', require('./v1/resenaController'));
 
 module.exports = router;

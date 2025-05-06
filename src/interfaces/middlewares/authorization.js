@@ -12,14 +12,16 @@ class AuthorizationMiddleware {
         "read:reservas", "update:reservas", "cancel:reservas",
         "read:cupon", "write:cupon", "update:cupon", "delete:cupon",
         "read:pagos", "update:pagos", "delete:pagos", "refund:pagos",
-        "read:comprobantes", "update:comprobantes", "delete:comprobantes"
+        "read:comprobantes", "update:comprobantes", "delete:comprobantes",
+        "read:resenas", "delete:resenas"
       ],
       "cliente": [
         "list:centro", "read:centro",
         "read:public", "write:reservas", "cancel:propias",
         "update:perfil", "read:pagos_propios", "create:pagos",
         "read:cupon",
-        "read:comprobantes_propios", "update:comprobantes_propios", "delete:comprobantes_propios"
+        "read:comprobantes_propios", "update:comprobantes_propios", "delete:comprobantes_propios",
+        "create:resenas", "read:resenas", "update:resenas_propios", "delete:resenas_propios"
       ]
     };
   }
@@ -36,9 +38,15 @@ class AuthorizationMiddleware {
   }
 
   checkPermission(requiredPermission) {
-    return (userGroups) => {
-      if (!this.hasPermission(userGroups, requiredPermission)) {
-        throw Boom.forbidden(`Permiso requerido: ${requiredPermission}`);
+    return (req, res, next) => {
+      try {
+        const userGroups = req.user.groups || [];
+        if (!this.hasPermission(userGroups, requiredPermission)) {
+          throw Boom.forbidden(`No tienes permiso para realizar esta acción. Permiso requerido: ${requiredPermission}`);
+        }
+        next();
+      } catch (error) {
+        next(error);
       }
     };
   }

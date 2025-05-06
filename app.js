@@ -9,6 +9,7 @@ const HorariosRepository = require('./src/infrastructure/repositories/horariosRe
 const ReservaRepository = require('./src/infrastructure/repositories/reservaRepository');
 const CuponDescuentoRepository = require('./src/infrastructure/repositories/cuponDescuentoRepository');
 const PagosRepository = require('./src/infrastructure/repositories/pagosRepository');
+const ResenaRepository = require('./src/infrastructure/repositories/resenaRepository');
 const errorHandler = require('./src/interfaces/middlewares/errorHandler');
 const routes = require('./src/interfaces/http/routes');
 
@@ -37,7 +38,7 @@ const horariosRepository = new HorariosRepository();
 const cuponDescuentoRepository = new CuponDescuentoRepository();
 const reservaRepository = new ReservaRepository();
 const pagosRepository = new PagosRepository();
-
+const resenaRepository = new ResenaRepository();
 // Configuración de middlewares
 app.set('userRepository', userRepository);
 app.set('centroDeportivoRepository', centroDeportivoRepository);
@@ -46,7 +47,7 @@ app.set('horariosRepository', horariosRepository);
 app.set('cuponDescuentoRepository', cuponDescuentoRepository);
 app.set('reservaRepository', reservaRepository); 
 app.set('pagosRepository', pagosRepository); 
-
+app.set('resenaRepository', resenaRepository); 
 app.use(cors({
   exposedHeaders: ['X-Access-Token'] // Permitir encabezados personalizados
 }));
