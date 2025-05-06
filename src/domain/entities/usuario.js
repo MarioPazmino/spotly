@@ -8,7 +8,7 @@ class Usuario {
     picture, // URL de la imagen de perfil
     registrationSource, // Origen: 'cognito', 'google', 'facebook', etc.
     lastLogin, // Fecha y hora del último inicio de sesión
-    pendienteAprobacion, // Nuevo atributo
+    pendienteAprobacion, // el admincentro de web debe estar pendiente de aprobación
     createdAt, // Fecha de creación del registro
     updatedAt // Fecha de última actualización
   }) {

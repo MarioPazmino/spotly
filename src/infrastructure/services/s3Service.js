@@ -141,6 +141,29 @@ async function uploadComprobanteTransferencia(buffer, originalName, pagoId) {
 }
 
 /**
+ * Sube una imagen de perfil de usuario a S3
+ * @param {Buffer} buffer - Buffer del archivo
+ * @param {string} originalName - Nombre original del archivo
+ * @param {string} userId - ID del usuario
+ * @returns {Promise<string>} key del objeto en S3
+ */
+async function uploadUserProfileImage(buffer, originalName, userId) {
+  const metadata = await validateImage(buffer);
+  const ext = path.extname(originalName).toLowerCase();
+  const key = `usuarios/${userId}/${uuidv4()}${ext}`;
+
+  const params = {
+    Bucket: BUCKET,
+    Key: key,
+    Body: buffer,
+    ContentType: MIME_TYPES[metadata.format],
+  };
+
+  await s3.putObject(params).promise();
+  return key;
+}
+
+/**
  * Genera una presigned URL para acceder temporalmente a un objeto privado
  * @param {string} key - Key del objeto en S3
  * @param {number} [expiresInSeconds] - Tiempo de expiración en segundos (opcional, si no se pasa se toma de ENV o 1h)
@@ -180,6 +203,7 @@ module.exports = {
   uploadImage,
   uploadCanchaImage,
   uploadComprobanteTransferencia,
+  uploadUserProfileImage,
   getPresignedUrl,
   deleteObject
 };

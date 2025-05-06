@@ -1,8 +1,8 @@
 // src/interfaces/http/controllers/v1/ImagenUsuarioController.js
 const Boom = require('@hapi/boom');
 const UserService = require('../../../../../infrastructure/services/userService');
-const { uploadImage, getPresignedUrl } = require('../../../../../infrastructure/services/s3Service');
-const { sanitizeString } = require('../../../../../utils/sanitizeInput');
+const { uploadUserProfileImage, getPresignedUrl } = require('../../../../../infrastructure/services/s3Service');
+const { sanitizeImageUrl } = require('../../../../../utils/sanitizeInput');
 
 /**
  * Subir o actualizar imagen de perfil de usuario (solo 1 imagen)
@@ -16,7 +16,7 @@ exports.uploadImagen = async (req, res, next) => {
     // 1. Procesar archivo subido
     if (req.file) {
       // Subir imagen como privada y obtener key
-      const key = await uploadImage(req.file.buffer, req.file.originalname, userId);
+      const key = await uploadUserProfileImage(req.file.buffer, req.file.originalname, userId);
       // Generar presigned URL para mostrar la imagen
       url = getPresignedUrl(key); // Usar expiración configurable
     }
@@ -27,9 +27,15 @@ exports.uploadImagen = async (req, res, next) => {
       throw Boom.badRequest('Debes subir una imagen válida.');
     }
 
-    // 3. Actualizar usuario
-    const updated = await UserService.updateUserProfile(userId, { picture: url }, userId);
-    return res.status(200).json({ picture: url });
+    // Sanitizar la URL antes de guardarla
+    const sanitizedUrl = sanitizeImageUrl(url);
+    if (!sanitizedUrl) {
+      throw Boom.badRequest('La URL de la imagen no es válida.');
+    }
+
+    // 3. Actualizar usuario con la URL sanitizada
+    const updated = await UserService.updateUserProfile(userId, { picture: sanitizedUrl }, userId);
+    return res.status(200).json({ picture: sanitizedUrl });
   } catch (error) {
     next(error);
   }

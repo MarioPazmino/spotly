@@ -116,6 +116,13 @@ function sanitizeResena(resena) {
 const sanitizeUsuario = (usuario) => {
   if (!usuario) return null;
   
+  // Validar registrationSource
+  const validSources = ['web', 'mobile', 'cognito', 'google', 'facebook'];
+  const registrationSource = usuario.registrationSource || usuario.registration_source;
+  const sanitizedSource = validSources.includes(registrationSource) 
+    ? registrationSource 
+    : 'cognito';
+  
   return {
     id: sanitizeId(usuario.id),
     email: sanitizeEmail(usuario.email),
@@ -123,7 +130,7 @@ const sanitizeUsuario = (usuario) => {
     apellido: sanitizeText(usuario.apellido),
     telefono: sanitizeText(usuario.telefono),
     role: sanitizeText(usuario.role),
-    registration_source: sanitizeText(usuario.registration_source),
+    registrationSource: sanitizedSource,
     pendiente_aprobacion: sanitizeText(usuario.pendiente_aprobacion),
     picture: sanitizeText(usuario.picture)
   };
@@ -150,6 +157,45 @@ const sanitizeCancha = (cancha) => {
 };
 
 /**
+ * Sanitiza una URL de imagen asegurando que sea una URL válida del bucket S3
+ * @param {string} url - URL de la imagen a sanitizar
+ * @returns {string} URL sanitizada o cadena vacía si no es válida
+ */
+const sanitizeImageUrl = (url) => {
+  if (!url) return '';
+  
+  try {
+    // Validar que sea una URL válida
+    const parsedUrl = new URL(url);
+    
+    // Verificar que sea una URL de S3 del bucket correcto
+    const bucketName = process.env.IMAGENES_CENTROS_BUCKET || 'spotly-centros-imagenes-dev';
+    if (!parsedUrl.hostname.includes(bucketName)) {
+      return '';
+    }
+    
+    // Verificar que la ruta comience con uno de los prefijos permitidos
+    const path = parsedUrl.pathname.slice(1); // Remover el slash inicial
+    const validPrefixes = ['centros/', 'canchas/', 'comprobantes/', 'usuarios/'];
+    if (!validPrefixes.some(prefix => path.startsWith(prefix))) {
+      return '';
+    }
+    
+    // Verificar que la extensión sea de imagen común permitida
+    const extension = path.split('.').pop().toLowerCase();
+    const validExtensions = ['jpg', 'jpeg', 'png', 'webp'];
+    
+    if (!validExtensions.includes(extension)) {
+      return '';
+    }
+    
+    return url;
+  } catch (error) {
+    return '';
+  }
+};
+
+/**
  * Sanitiza un objeto de centro deportivo
  * @param {Object} centro - Objeto de centro deportivo a sanitizar
  * @returns {Object} Objeto de centro deportivo sanitizado
@@ -168,7 +214,7 @@ const sanitizeCentroDeportivo = (centro) => {
     cedulaJuridica: sanitizeText(centro.cedulaJuridica),
     horaApertura: sanitizeText(centro.horaApertura),
     horaCierre: sanitizeText(centro.horaCierre),
-    imagen: sanitizeText(centro.imagen)
+    imagen: sanitizeImageUrl(centro.imagen)
   };
 };
 
@@ -181,5 +227,6 @@ module.exports = {
   sanitizeResena,
   sanitizeUsuario,
   sanitizeCancha,
-  sanitizeCentroDeportivo
+  sanitizeCentroDeportivo,
+  sanitizeImageUrl
 };

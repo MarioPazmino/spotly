@@ -34,16 +34,26 @@ exports.handler = async (event, context) => {
     }
 
     // Determinar el grupo al que debe pertenecer
-    const groupName = 
-      user.role === 'cliente'
-        ? process.env.CLIENTE_GROUP_NAME
-        : user.role === 'admin_centro' && user.pendienteAprobacion === 'false'
-        ? process.env.ADMIN_CENTRO_GROUP_NAME
-        : user.role === 'super_admin'
-        ? process.env.SUPER_ADMIN_GROUP_NAME
-        : null;
+    let groupName = null;
 
-    // Añadir al grupo correspondiente
+    // Lógica mejorada para asignación de grupos
+    if (user.role === 'cliente') {
+      // Clientes siempre van al grupo cliente
+      groupName = process.env.CLIENTE_GROUP_NAME;
+    } else if (user.role === 'super_admin') {
+      // Super admin siempre va al grupo super_admin
+      groupName = process.env.SUPER_ADMIN_GROUP_NAME;
+    } else if (user.role === 'admin_centro') {
+      // Admin centro solo va al grupo si está aprobado
+      if (user.pendienteAprobacion === 'false') {
+        groupName = process.env.ADMIN_CENTRO_GROUP_NAME;
+        console.log(`Admin centro aprobado, asignando al grupo: ${userId}`);
+      } else {
+        console.log(`Admin centro pendiente de aprobación, no se asigna grupo: ${userId}`);
+      }
+    }
+
+    // Añadir al grupo correspondiente solo si se determinó un grupo
     if (groupName) {
       await addUserToGroup(userId, userPoolId, groupName);
       console.log(`Usuario añadido al grupo ${groupName}: ${userId}`);
