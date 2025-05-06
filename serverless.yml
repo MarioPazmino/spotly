@@ -859,7 +859,7 @@ resources:
     NotificationsTopic:
       Type: AWS::SNS::Topic
       Properties:
-        TopicName: ${self:service}-notifications-${self:custom.stage}
+        TopicName: spotly-notifications-${self:custom.stage}
         DisplayName: Spotly Notifications
         KmsMasterKeyId: alias/aws/sns
 
