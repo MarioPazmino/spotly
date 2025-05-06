@@ -1,60 +1,78 @@
 //src/infrastructure/repositories/centroDeportivoRepository.js
-const AWS = require('aws-sdk');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
+const { v4: uuidv4 } = require('uuid');
 const CentroDeportivo = require('../../domain/entities/centro-deportivo');
-const dynamoDB = new AWS.DynamoDB.DocumentClient();
 
 class CentroDeportivoRepository {
   constructor() {
-    this.CENTROS_DEPORTIVOS_TABLE = process.env.CENTROS_DEPORTIVOS_TABLE || 'CentrosDeportivos';
+    const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
+    this.docClient = DynamoDBDocumentClient.from(client);
+    this.tableName = process.env.CENTROS_DEPORTIVOS_TABLE || 'CentrosDeportivos-dev';
   }
 
-  async save(centro) {
+  async create(centroData) {
     const params = {
-      TableName: this.CENTROS_DEPORTIVOS_TABLE,
-      Item: centro
+      TableName: this.tableName,
+      Item: {
+        ...centroData,
+        centroId: centroData.centroId || uuidv4(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
     };
-    await dynamoDB.put(params).promise();
-    return centro;
-  }
 
-  async findById(centroId) {
-    const params = {
-      TableName: this.CENTROS_DEPORTIVOS_TABLE,
-      Key: { centroId }
-    };
-    const result = await dynamoDB.get(params).promise();
-    return result.Item ? new CentroDeportivo(result.Item) : null;
+    await this.docClient.put(params);
+    return params.Item;
   }
 
   async update(centroId, updateData) {
-    // Construye la expresión de actualización dinámicamente
-    const updateExpressionParts = [];
-    const expressionAttributeValues = {};
+    const updateExpressions = [];
     const expressionAttributeNames = {};
+    const expressionAttributeValues = {};
 
-    for (const [key, value] of Object.entries(updateData)) {
-      updateExpressionParts.push(`#${key} = :${key}`);
-      expressionAttributeValues[`:${key}`] = value;
-      expressionAttributeNames[`#${key}`] = key;
-    }
+    // Construir expresiones de actualización
+    Object.entries(updateData).forEach(([key, value]) => {
+      if (key !== 'imagenes') { // Excluir imágenes del update básico
+        updateExpressions.push(`#${key} = :${key}`);
+        expressionAttributeNames[`#${key}`] = key;
+        expressionAttributeValues[`:${key}`] = value;
+      }
+    });
+
+    // Agregar timestamp de actualización
+    updateExpressions.push('#updatedAt = :updatedAt');
+    expressionAttributeNames['#updatedAt'] = 'updatedAt';
+    expressionAttributeValues[':updatedAt'] = new Date().toISOString();
+
     const params = {
-      TableName: this.CENTROS_DEPORTIVOS_TABLE,
+      TableName: this.tableName,
       Key: { centroId },
-      UpdateExpression: `SET ${updateExpressionParts.join(', ')}`,
+      UpdateExpression: `SET ${updateExpressions.join(', ')}`,
       ExpressionAttributeNames: expressionAttributeNames,
       ExpressionAttributeValues: expressionAttributeValues,
       ReturnValues: 'ALL_NEW'
     };
-    const result = await dynamoDB.update(params).promise();
-    return result.Attributes ? new CentroDeportivo(result.Attributes) : null;
+
+    const result = await this.docClient.update(params);
+    return result.Attributes;
+  }
+
+  async findById(centroId) {
+    const params = {
+      TableName: this.tableName,
+      Key: { centroId }
+    };
+    const result = await this.docClient.get(params);
+    return result.Item ? new CentroDeportivo(result.Item) : null;
   }
 
   async delete(centroId) {
     const params = {
-      TableName: this.CENTROS_DEPORTIVOS_TABLE,
+      TableName: this.tableName,
       Key: { centroId }
     };
-    await dynamoDB.delete(params).promise();
+    await this.docClient.delete(params);
     return { centroId, deleted: true };
   }
 
@@ -91,7 +109,7 @@ class CentroDeportivoRepository {
     if (canQueryByUserId || canQueryByUserIdEstado || canQueryByEstado || canQueryByNombre || canQueryByApertura || canQueryByCierre) {
       // Construir parámetros para query
       let params = {
-        TableName: this.CENTROS_DEPORTIVOS_TABLE,
+        TableName: this.tableName,
         Limit: SCAN_BATCH_SIZE,
         ExclusiveStartKey: lastEvaluatedKey
       };
@@ -135,7 +153,7 @@ class CentroDeportivoRepository {
       }
 
       try {
-        const result = await dynamoDB.query(params).promise();
+        const result = await this.docClient.query(params).promise();
         scannedCount += result.ScannedCount || 0;
         dynamoLastEvaluatedKey = result.LastEvaluatedKey || null;
         const items = result.Items.map(item => new CentroDeportivo(item));
@@ -202,4 +220,4 @@ class CentroDeportivoRepository {
   }
 }
 
-module.exports = CentroDeportivoRepository;
+module.exports = new CentroDeportivoRepository();

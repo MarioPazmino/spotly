@@ -14,7 +14,7 @@ class CentroDeportivo {
     estado, // Estado operativo: 'abierto', 'cerrado', etc.
     // Cuentas bancarias (array de objetos)
     bancos, // Array de cuentas bancarias
-    cedulaJuridica, // RUC del centro deportivo (común a todas las cuentas)
+    cedulaJuridica, // RUC del centro deportivo (no es obligatorio)
     // Braintree
     braintreeMerchantId, // ID de la cuenta de Braintree del centro deportivo
     braintreeStatus, // Estado de la cuenta: 'activa', 'pendiente', 'rechazada'

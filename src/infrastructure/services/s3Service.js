@@ -60,15 +60,15 @@ async function validateImage(buffer) {
  * @param {string} format - Formato detectado
  * @returns {boolean} true si el MIME type es válido
  */
-function isValidMime(buffer, format) {
-  // JPEG: FF D8 FF
-  if (format === 'jpeg' && buffer.slice(0, 3).toString('hex') === 'ffd8ff') return true;
-  // PNG: 89 50 4E 47 0D 0A 1A 0A
-  if (format === 'png' && buffer.slice(0, 8).toString('hex') === '89504e470d0a1a0a') return true;
-  // WEBP: RIFF....WEBP
-  if (format === 'webp' && buffer.slice(8, 12).toString() === 'WEBP') return true;
-  return false;
-}
+  function isValidMime(buffer, format) {
+    // JPEG: FF D8 FF
+    if (format === 'jpeg' && buffer.slice(0, 3).toString('hex') === 'ffd8ff') return true;
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    if (format === 'png' && buffer.slice(0, 8).toString('hex') === '89504e470d0a1a0a') return true;
+    // WEBP: RIFF....WEBP
+    if (format === 'webp' && buffer.slice(8, 12).toString() === 'WEBP') return true;
+    return false;
+  }
 
 /**
  * Sube una imagen a S3 y retorna la key del objeto

@@ -17,14 +17,14 @@ module.exports = function validarPagos(req, res, next) {
   // Validar estructura de detallesPago
   if (!detallesPago || typeof detallesPago !== 'object') {
     return res.status(400).json({ error: 'Se requieren detalles del pago' });
-  }
+    }
 
   // Validar estructura según método de pago
   switch (metodoPago) {
     case 'tarjeta':
       if (!detallesPago.paymentMethodNonce || typeof detallesPago.paymentMethodNonce !== 'string') {
         return res.status(400).json({ error: 'Se requiere paymentMethodNonce para pagos con tarjeta' });
-      }
+    }
       break;
 
     case 'transferencia':

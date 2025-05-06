@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const CentroDeportivoController = require('../../controllers/v1/CentroDeportivoController');
 const auth = require('../../../middlewares/CognitoAuthMiddleware').authenticate();
-const { validateCentro, validateLocationSearch, validateCentroQuery } = require('../../../middlewares/validateCentroDeportivo');
+const { validateCentro, validateLocationSearch, validateCentroQuery, validateImagenes } = require('../../../middlewares/validateCentroDeportivo');
 const Authorization = require('../../../middlewares/authorization');
 const ImagenCentroController = require('../../controllers/v1/uploadImagenes/ImagenCentroController');
 const multer = require('multer');
@@ -97,7 +97,7 @@ router.post('/centros/:centroId/imagenes',
   auth,
   validateUUID('centroId'),
   checkCentroOwnership,
-  upload.array('imagenes', 3),
+  validateImagenes,
   ImagenCentroController.uploadImagenes
 );
 

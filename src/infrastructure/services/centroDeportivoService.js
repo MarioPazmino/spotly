@@ -3,13 +3,11 @@ const CentroDeportivoRepository = require('../repositories/centroDeportivoReposi
 const CentroDeportivo = require('../../domain/entities/centro-deportivo');
 const geoLocationService = require('./geoLocationService');
 const Boom = require('@hapi/boom');
-const { v4: uuidv4 } = require('uuid'); // Necesitarás añadir esta dependencia
+const { v4: uuidv4 } = require('uuid');
 const UserRepository = require('../repositories/userRepository');
 const { sanitizeObject } = require('../../utils/sanitizeInput');
 const AWS = require('aws-sdk');
-
-// Cambia el límite de tamaño máximo de imagen a 5MB en todos los lugares relevantes
-const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const imagenCentroService = require('./imagenCentroService');
 
 class CentroDeportivoService {
   constructor() {
@@ -58,46 +56,21 @@ class CentroDeportivoService {
 
 
   async createCentro(centroData) {
-    // Sanitizar los datos de entrada
-    const cleanData = sanitizeObject(centroData);
-
-    // Validar existencia de usuario (esto sí es lógica de negocio)
-    const user = await this.userRepo.findById(cleanData.userId);
-    if (!user) {
-      throw Boom.badRequest('El usuario asignado (userId) no existe');
+    // Validar datos básicos
+    if (!centroData.nombre || !centroData.direccion) {
+      throw new Error('Nombre y dirección son requeridos');
     }
 
-    // Calcula los campos auxiliares de horario antes de guardar
-    function calcularHorasMinMax(horario) {
-      if (!Array.isArray(horario) || horario.length === 0) return { horaAperturaMinima: null, horaCierreMaxima: null };
-      // Asume formato 'HH:mm' y ordena correctamente
-      // Forzar a HH:mm si por error viene con segundos
-      const normalizar = hora => typeof hora === 'string' ? hora.slice(0,5) : hora;
-      const horasApertura = horario.map(h => normalizar(h.abre)).sort();
-      const horasCierre = horario.map(h => normalizar(h.cierra)).sort();
-      return {
-        horaAperturaMinima: horasApertura[0],
-        horaCierreMaxima: horasCierre[horasCierre.length - 1]
-      };
+    // Crear centro sin imágenes inicialmente
+    const { imagenes, ...datosCentro } = centroData;
+    const centro = await this.repo.save(new CentroDeportivo(datosCentro));
+
+    // Si hay imágenes, procesarlas
+    if (imagenes && imagenes.length > 0) {
+      await imagenCentroService.agregarImagenes(centro.centroId, imagenes);
     }
 
-    const horario = cleanData.horario || [];
-    const { horaAperturaMinima, horaCierreMaxima } = calcularHorasMinMax(horario);
-    cleanData.horaAperturaMinima = horaAperturaMinima;
-    cleanData.horaCierreMaxima = horaCierreMaxima;
-    // Forzar formato HH:mm en los campos auxiliares
-    if (typeof cleanData.horaAperturaMinima === 'string') cleanData.horaAperturaMinima = cleanData.horaAperturaMinima.slice(0,5);
-    if (typeof cleanData.horaCierreMaxima === 'string') cleanData.horaCierreMaxima = cleanData.horaCierreMaxima.slice(0,5);
-
-    // Crear un centro deportivo con ID único
-    const centro = new CentroDeportivo({
-      ...cleanData,
-      centroId: cleanData.centroId || uuidv4(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
-    
-    return await this.repo.save(centro);
+    return centro;
   }
 
   async getCentroById(centroId) {
@@ -113,46 +86,24 @@ class CentroDeportivoService {
   }
 
   async updateCentro(centroId, updateData) {
-    // Sanitizar los datos de entrada
-    const cleanData = sanitizeObject(updateData);
-    // Validar formato del ID
-    this.validateCentroId(centroId);
-    // Verificar que el centro existe
-    const existingCentro = await this.repo.findById(centroId);
-    if (!existingCentro) {
-      throw Boom.notFound(`Centro deportivo con ID ${centroId} no encontrado`);
+    // Validar que el centro existe
+    const centro = await this.getCentroById(centroId);
+    if (!centro) {
+      throw new Error('Centro deportivo no encontrado');
     }
-    // Validar que haya al menos un campo para actualizar
-    if (Object.keys(cleanData).length === 0) {
-      throw Boom.badRequest('Debe proporcionar al menos un campo para actualizar');
+
+    // Separar imágenes del resto de datos
+    const { imagenes, ...datosActualizacion } = updateData;
+
+    // Actualizar datos básicos
+    const centroActualizado = await this.repo.update(centroId, datosActualizacion);
+
+    // Si hay imágenes, procesarlas
+    if (imagenes && imagenes.length > 0) {
+      await imagenCentroService.agregarImagenes(centroId, imagenes);
     }
-    // Calcula los campos auxiliares de horario antes de actualizar
-    if (cleanData.horario) {
-      const { horaAperturaMinima, horaCierreMaxima } = calcularHorasMinMax(cleanData.horario);
-      cleanData.horaAperturaMinima = horaAperturaMinima;
-      cleanData.horaCierreMaxima = horaCierreMaxima;
-    }
-    // Validación defensiva: no permitir más de 3 imágenes
-    let imagenes = cleanData.imagenes !== undefined ? cleanData.imagenes : existingCentro.imagenes || [];
-    if (Array.isArray(imagenes)) {
-      imagenes = imagenes.slice(0, 3);
-      if (imagenes.length > 3) {
-        throw Boom.badRequest('No se permiten más de 3 imágenes por centro deportivo.');
-      }
-      cleanData.imagenes = imagenes;
-    }
-    // Añadir marca de tiempo de actualización
-    const dataToUpdate = {
-      ...cleanData,
-      updatedAt: new Date().toISOString()
-    };
-    // Condición optimista: solo actualiza si las imágenes no cambiaron desde que las leíste
-    return await this.repo.update(centroId, dataToUpdate, {
-      ConditionExpression: 'attribute_not_exists(imagenes) OR imagenes = :oldImagenes',
-      ExpressionAttributeValues: {
-        ':oldImagenes': existingCentro.imagenes || []
-      }
-    });
+
+    return centroActualizado;
   }
 
 

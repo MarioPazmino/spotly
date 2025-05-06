@@ -1,5 +1,6 @@
 // src/interfaces/middlewares/validateCentroDeportivo.js
 const Joi = require('joi');
+const Boom = require('@hapi/boom');
 
 // Servicios válidos predefinidos
 const SERVICIOS_VALIDOS = ["futbol", "natación", "gimnasio"];
@@ -7,8 +8,8 @@ const REDES_VALIDAS = ["facebook", "instagram", "twitter"];
 
 // Esquema base con todos los campos posibles del centro deportivo
 const centroDeportivoBaseSchema = {
-  nombre: Joi.string(),
-  direccion: Joi.string(),
+  nombre: Joi.string().required().min(3).max(100),
+  direccion: Joi.string().required().min(5).max(200),
   telefonoPrincipal: Joi.string().pattern(/^[+][1-9]\d{7,14}$/).required()
     .messages({
       'string.pattern.base': 'El teléfono principal debe estar en formato internacional E.164 (ej: +593989508266)'
@@ -17,19 +18,15 @@ const centroDeportivoBaseSchema = {
     .messages({
       'string.pattern.base': 'El teléfono secundario debe estar en formato internacional E.164 (ej: +593989508266)'
     }),
+  email: Joi.string().email(),
+  descripcion: Joi.string().max(500),
   userId: Joi.string(),
   // --- HORARIO FLEXIBLE POR DÍA ---
   horario: Joi.array().items(
     Joi.object({
-      dia: Joi.string().valid('Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo').required(),
-      abre: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/).required()
-        .messages({
-          'string.pattern.base': 'La hora de apertura debe estar en formato HH:mm (00:00 a 23:59)'
-        }),
-      cierra: Joi.string().pattern(/^([01]\d|2[0-3]):([0-5]\d)$/).required()
-        .messages({
-          'string.pattern.base': 'La hora de cierre debe estar en formato HH:mm (00:00 a 23:59)'
-        })
+      dia: Joi.string().valid('lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo').required(),
+      abre: Joi.string().pattern(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
+      cierra: Joi.string().pattern(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).required()
     })
   ),
   ubicacionGPS: Joi.object({
@@ -46,13 +43,7 @@ const centroDeportivoBaseSchema = {
         'any.required': 'La longitud es requerida'
       })
   }),
-  imagenes: Joi.array().items(
-    Joi.string().uri().pattern(/\.(jpg|jpeg|png|webp)$/i)
-      .messages({
-        'string.pattern.base': 'La imagen debe ser una URL que termine en .jpg, .jpeg, .png o .webp',
-        'string.uri': 'La imagen debe ser una URL válida'
-      })
-  ),
+  imagenes: Joi.array().max(3).items(Joi.string().uri()),
   servicios: Joi.array().items(Joi.string().valid(...SERVICIOS_VALIDOS))
     .messages({
       'any.only': `El servicio debe ser uno de: ${SERVICIOS_VALIDOS.join(', ')}`
@@ -189,28 +180,12 @@ const centroDeportivoQuerySchema = Joi.object({
  * Middleware para validar centro deportivo según el método HTTP
  */
 const validateCentro = (req, res, next) => {
-  try {
-    // Seleccionar esquema según el método HTTP
-    const schema = req.method === 'POST' ? createSchema : updateSchema;
-    
-    const { error } = schema.validate(req.body);
-    
-    if (error) {
-      return res.status(400).json({
-        error: error.message,
-        code: 'VALIDATION_ERROR'
-      });
-    }
-    
-    // Si es una actualización, asegurar que se incluya el timestamp
-    if (req.method === 'PUT' || req.method === 'PATCH') {
-      req.body.updatedAt = new Date().toISOString();
-    }
-    
-    next();
-  } catch (error) {
-    next(error);
+  const { error } = centroDeportivoBaseSchema.validate(req.body, { abortEarly: false });
+  if (error) {
+    const errorMessage = error.details.map(detail => detail.message).join(', ');
+    return next(Boom.badRequest(errorMessage));
   }
+  next();
 };
 
 /**
@@ -259,8 +234,27 @@ const validateCentroQuery = (req, res, next) => {
   }
 };
 
+exports.validateImagenes = (req, res, next) => {
+  if (!req.files || req.files.length === 0) {
+    return next(Boom.badRequest('No se proporcionaron archivos'));
+  }
+
+  if (req.files.length > 3) {
+    return next(Boom.badRequest('Máximo 3 imágenes permitidas'));
+  }
+
+  const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp'];
+  const archivoInvalido = req.files.find(file => !tiposPermitidos.includes(file.mimetype));
+  if (archivoInvalido) {
+    return next(Boom.badRequest('Solo se permiten imágenes JPEG, PNG y WebP'));
+  }
+
+  next();
+};
+
 module.exports = {
   validateCentro,
   validateLocationSearch,
-  validateCentroQuery
+  validateCentroQuery,
+  validateImagenes
 };

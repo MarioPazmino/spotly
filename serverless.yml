@@ -34,7 +34,6 @@ provider:
   runtime: nodejs18.x
   region: us-east-1
   environment:
-    DYNAMODB_TABLE: ${self:service}-${self:provider.stage}-resenas
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
     NOTIFICATIONS_TOPIC_ARN: !Ref NotificationsTopic
   iam:
