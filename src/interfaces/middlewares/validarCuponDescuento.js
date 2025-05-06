@@ -62,14 +62,6 @@ module.exports = function validarCuponDescuento(req, res, next) {
   if (maximoUsos !== undefined && (!Number.isInteger(maximoUsos) || maximoUsos < 1)) {
     return res.status(400).json({ error: 'maximoUsos debe ser un entero mayor o igual a 1.' });
   }
-  // Validar que usosRestantes no sea negativo ni mayor que maximoUsos
-  if (req.body.usosRestantes !== undefined) {
-    if (req.body.usosRestantes < 0) {
-      return res.status(400).json({ error: 'usosRestantes no puede ser negativo.' });
-    }
-    if (maximoUsos !== undefined && req.body.usosRestantes > maximoUsos) {
-      return res.status(400).json({ error: 'usosRestantes no puede ser mayor que maximoUsos.' });
-    }
-  }
+
   next();
 };

@@ -2,29 +2,44 @@
 
 module.exports = function validarPagos(req, res, next) {
   const { monto, metodoPago, detallesPago } = req.body;
-  if (typeof monto !== 'number' || monto <= 0) {
-    return res.status(400).json({ error: 'El monto debe ser un número mayor a 0.' });
+
+  // Validar formato de monto
+  if (typeof monto !== 'number' || isNaN(monto)) {
+    return res.status(400).json({ error: 'El monto debe ser un número válido' });
   }
+
+  // Validar formato de método de pago
   const metodosPermitidos = ['tarjeta', 'transferencia', 'efectivo'];
   if (!metodoPago || !metodosPermitidos.includes(metodoPago)) {
-    return res.status(400).json({ error: 'Método de pago no soportado.' });
+    return res.status(400).json({ error: 'Método de pago no válido' });
   }
-  if (metodoPago === 'tarjeta') {
-    if (!detallesPago || !detallesPago.braintreeTransactionId) {
-      return res.status(400).json({ error: 'Para pagos con tarjeta se requiere braintreeTransactionId.' });
-    }
+
+  // Validar estructura de detallesPago
+  if (!detallesPago || typeof detallesPago !== 'object') {
+    return res.status(400).json({ error: 'Se requieren detalles del pago' });
   }
-  if (metodoPago === 'transferencia') {
-    if (!detallesPago || !detallesPago.bancoDestino || !detallesPago.cuentaDestino) {
-      return res.status(400).json({ error: 'Para transferencias se requiere bancoDestino y cuentaDestino.' });
-    }
+
+  // Validar estructura según método de pago
+  switch (metodoPago) {
+    case 'tarjeta':
+      if (!detallesPago.paymentMethodNonce || typeof detallesPago.paymentMethodNonce !== 'string') {
+        return res.status(400).json({ error: 'Se requiere paymentMethodNonce para pagos con tarjeta' });
+      }
+      break;
+
+    case 'transferencia':
+      if (!detallesPago.bancoDestino || typeof detallesPago.bancoDestino !== 'string') {
+        return res.status(400).json({ error: 'Se requiere bancoDestino para transferencias' });
+      }
+      if (!detallesPago.cuentaDestino || typeof detallesPago.cuentaDestino !== 'string') {
+        return res.status(400).json({ error: 'Se requiere cuentaDestino para transferencias' });
+      }
+      break;
+
+    case 'efectivo':
+      // No requiere validación de estructura para efectivo
+      break;
   }
-  if (metodoPago === 'efectivo') {
-    // Si la lógica de tu entidad requiere un campo especial para efectivo (por ejemplo, codigoPago), valida aquí:
-    // if (!detallesPago || !detallesPago.codigoPago) {
-    //   return res.status(400).json({ error: 'Para pagos en efectivo se requiere codigoPago.' });
-    // }
-    // Si no se requiere nada, simplemente pasa
-  }
+
   next();
 };

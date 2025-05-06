@@ -26,11 +26,7 @@ class CuponDescuentoService {
     // Normalizar fechas
     if (data.fechaInicio) data.fechaInicio = normalizarFechaGuayaquil(data.fechaInicio);
     if (data.fechaFin) data.fechaFin = normalizarFechaGuayaquil(data.fechaFin);
-    // Validar que usosRestantes no sea negativo ni mayor que maximoUsos
-    if (data.usosRestantes !== undefined) {
-      if (data.usosRestantes < 0) throw new Error('usosRestantes no puede ser negativo');
-      if (data.maximoUsos !== undefined && data.usosRestantes > data.maximoUsos) throw new Error('usosRestantes no puede ser mayor que maximoUsos');
-    }
+    
     return this.repo.create(data);
   }
   async getById(cuponId) {
@@ -40,17 +36,6 @@ class CuponDescuentoService {
     return this.repo.findByCodigo(codigo);
   }
   async update(cuponId, updates, userId) {
-    // Validar que usosRestantes no sea negativo ni mayor que maximoUsos
-    if (updates.usosRestantes !== undefined) {
-      // Obtener maximoUsos actualizado o actual
-      let maximoUsos = updates.maximoUsos;
-      if (maximoUsos === undefined) {
-        const cupon = await this.repo.getById(cuponId);
-        maximoUsos = cupon ? cupon.maximoUsos : undefined;
-      }
-      if (updates.usosRestantes < 0) throw new Error('usosRestantes no puede ser negativo');
-      if (maximoUsos !== undefined && updates.usosRestantes > maximoUsos) throw new Error('usosRestantes no puede ser mayor que maximoUsos');
-    }
     // Impedir modificar centroId
     if (updates.centroId !== undefined) {
       const cupon = await this.repo.getById(cuponId);
@@ -104,15 +89,7 @@ class CuponDescuentoService {
     if (!estaEnRango(ahora, cupon.fechaInicio, cupon.fechaFin)) {
       throw new Error('El cupón no está vigente');
     }
-    if (cupon.usosRestantes <= 0) {
-      throw new Error('El cupón ya no tiene usos disponibles');
-    }
-    // Actualizar usosRestantes de forma atómica y segura en DynamoDB
-    const actualizado = await this.repo.descontarUsoSeguro(cupon.cuponId);
-    if (!actualizado) {
-      throw new Error('No se pudo aplicar el cupón (concurrencia: sin usos disponibles)');
-    }
-    return actualizado;
+    return cupon;
   }
 }
 

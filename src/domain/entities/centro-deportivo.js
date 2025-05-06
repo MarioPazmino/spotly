@@ -16,8 +16,7 @@ class CentroDeportivo {
     bancos, // Array de cuentas bancarias
     cedulaJuridica, // RUC del centro deportivo (común a todas las cuentas)
     // Braintree
-    braintreeMerchantId, // ID de la cuenta de Braintree del admin_centro
-    braintreeAccountId, // ID de la cuenta bancaria en Braintree (opcional)
+    braintreeMerchantId, // ID de la cuenta de Braintree del centro deportivo
     braintreeStatus, // Estado de la cuenta: 'activa', 'pendiente', 'rechazada'
     // Redes sociales
     redesSociales, // Objeto con enlaces a redes sociales (opcional)
@@ -45,12 +44,8 @@ class CentroDeportivo {
     this.bancos = bancos || []; // Array vacío por defecto
     this.cedulaJuridica = cedulaJuridica || null; // RUC del centro
 
-    // Validación de dependencias Braintree
-    if (braintreeAccountId && !braintreeMerchantId) {
-      throw new Error('No se puede asignar braintreeAccountId sin un braintreeMerchantId asociado');
-    }
+    // Braintree
     this.braintreeMerchantId = braintreeMerchantId || null; // Nulo si no está vinculada
-    this.braintreeAccountId = braintreeAccountId || null; // Opcional
     this.braintreeStatus = braintreeStatus || 'pendiente'; // Estado inicial
 
     // Validar y limpiar servicios (sin duplicados, solo strings, sin espacios extra)

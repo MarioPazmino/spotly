@@ -11,21 +11,26 @@ const s3 = new AWS.S3({
 
 const BUCKET = process.env.IMAGENES_CENTROS_BUCKET || `spotly-centros-imagenes-dev`;
 
-/**
- * Sube una imagen a S3 y retorna la key del objeto (no la URL pública)
- * @param {Buffer} buffer - Buffer del archivo
- * @param {string} originalName - Nombre original del archivo
- * @param {string} centroId - ID del centro deportivo o usuario
- * @returns {Promise<string>} key del objeto en S3
- */
-async function uploadImage(buffer, originalName, centroId) {
-  const ext = path.extname(originalName).toLowerCase();
-  const key = `centros/${centroId}/${uuidv4()}${ext}`;
+// Constantes de validación
+const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+const ALLOWED_FORMATS = ['jpeg', 'png', 'webp'];
+const MIME_TYPES = {
+  jpeg: 'image/jpeg',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp'
+};
 
-  // Validar tamaño máximo (ahora 5MB)
-  const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+/**
+ * Valida el tamaño y formato de una imagen
+ * @param {Buffer} buffer - Buffer del archivo
+ * @returns {Promise<Object>} Metadata de la imagen validada
+ * @throws {Error} Si la validación falla
+ */
+async function validateImage(buffer) {
+  // Validar tamaño máximo
   if (buffer.length > MAX_SIZE_BYTES) {
-    throw new Error('La imagen excede el tamaño máximo permitido de 5MB.');
+    throw new Error('El archivo excede el tamaño máximo permitido de 5MB.');
   }
 
   // Validar tipo MIME real usando sharp
@@ -36,41 +41,99 @@ async function uploadImage(buffer, originalName, centroId) {
     throw new Error('No se pudo procesar la imagen o el archivo no es una imagen válida.');
   }
 
-  // Solo permitir JPEG, PNG y WEBP
-  if (!['jpeg', 'png', 'webp'].includes(metadata.format)) {
+  // Validar formato permitido
+  if (!ALLOWED_FORMATS.includes(metadata.format)) {
     throw new Error('Solo se permiten imágenes JPEG, PNG o WEBP.');
   }
 
-  // Validar el MIME type real del buffer (defensivo)
-  // Usar magic numbers para validar el buffer (sin instalar dependencias extra)
-  function isValidMime(buffer, format) {
-    // JPEG: FF D8 FF
-    if (format === 'jpeg' && buffer.slice(0, 3).toString('hex') === 'ffd8ff') return true;
-    // PNG: 89 50 4E 47 0D 0A 1A 0A
-    if (format === 'png' && buffer.slice(0, 8).toString('hex') === '89504e470d0a1a0a') return true;
-    // WEBP: RIFF....WEBP
-    if (format === 'webp' && buffer.slice(8, 12).toString() === 'WEBP') return true;
-    return false;
-  }
+  // Validar el MIME type real del buffer
   if (!isValidMime(buffer, metadata.format)) {
     throw new Error('El archivo no corresponde a una imagen válida.');
   }
 
-  // Ajustar ContentType según el formato real
-  let contentType;
-  if (metadata.format === 'jpeg' || metadata.format === 'jpg') {
-    contentType = 'image/jpeg';
-  } else if (metadata.format === 'png') {
-    contentType = 'image/png';
-  } else if (metadata.format === 'webp') {
-    contentType = 'image/webp';
-  }
+  return metadata;
+}
+
+/**
+ * Valida el MIME type real del buffer usando magic numbers
+ * @param {Buffer} buffer - Buffer del archivo
+ * @param {string} format - Formato detectado
+ * @returns {boolean} true si el MIME type es válido
+ */
+function isValidMime(buffer, format) {
+  // JPEG: FF D8 FF
+  if (format === 'jpeg' && buffer.slice(0, 3).toString('hex') === 'ffd8ff') return true;
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (format === 'png' && buffer.slice(0, 8).toString('hex') === '89504e470d0a1a0a') return true;
+  // WEBP: RIFF....WEBP
+  if (format === 'webp' && buffer.slice(8, 12).toString() === 'WEBP') return true;
+  return false;
+}
+
+/**
+ * Sube una imagen a S3 y retorna la key del objeto
+ * @param {Buffer} buffer - Buffer del archivo
+ * @param {string} originalName - Nombre original del archivo
+ * @param {string} centroId - ID del centro deportivo o usuario
+ * @returns {Promise<string>} key del objeto en S3
+ */
+async function uploadImage(buffer, originalName, centroId) {
+  const metadata = await validateImage(buffer);
+  const ext = path.extname(originalName).toLowerCase();
+  const key = `centros/${centroId}/${uuidv4()}${ext}`;
 
   const params = {
     Bucket: BUCKET,
     Key: key,
     Body: buffer,
-    ContentType: contentType,
+    ContentType: MIME_TYPES[metadata.format],
+  };
+
+  await s3.putObject(params).promise();
+  return key;
+}
+
+/**
+ * Sube una imagen de cancha a S3
+ * @param {Buffer} buffer - Buffer del archivo
+ * @param {string} originalName - Nombre original del archivo
+ * @param {string} centroId - ID del centro deportivo
+ * @param {string} canchaId - ID de la cancha
+ * @returns {Promise<string>} key del objeto en S3
+ */
+async function uploadCanchaImage(buffer, originalName, centroId, canchaId) {
+  const metadata = await validateImage(buffer);
+  const ext = path.extname(originalName).toLowerCase();
+  const key = `canchas/${centroId}/${canchaId}/${uuidv4()}${ext}`;
+
+  const params = {
+    Bucket: BUCKET,
+    Key: key,
+    Body: buffer,
+    ContentType: MIME_TYPES[metadata.format],
+  };
+
+  await s3.putObject(params).promise();
+  return key;
+}
+
+/**
+ * Sube un comprobante de transferencia a S3
+ * @param {Buffer} buffer - Buffer del archivo
+ * @param {string} originalName - Nombre original del archivo
+ * @param {string} pagoId - ID del pago
+ * @returns {Promise<string>} key del objeto en S3
+ */
+async function uploadComprobanteTransferencia(buffer, originalName, pagoId) {
+  const metadata = await validateImage(buffer);
+  const ext = path.extname(originalName).toLowerCase();
+  const key = `comprobantes/${pagoId}/${uuidv4()}${ext}`;
+
+  const params = {
+    Bucket: BUCKET,
+    Key: key,
+    Body: buffer,
+    ContentType: MIME_TYPES[metadata.format],
   };
 
   await s3.putObject(params).promise();
@@ -100,7 +163,23 @@ function getPresignedUrl(key, expiresInSeconds) {
   return s3.getSignedUrl('getObject', params);
 }
 
+/**
+ * Elimina un objeto de S3
+ * @param {string} key - Key del objeto en S3
+ * @returns {Promise<void>}
+ */
+async function deleteObject(key) {
+  const params = {
+    Bucket: BUCKET,
+    Key: key,
+  };
+  await s3.deleteObject(params).promise();
+}
+
 module.exports = {
   uploadImage,
+  uploadCanchaImage,
+  uploadComprobanteTransferencia,
   getPresignedUrl,
+  deleteObject
 };

@@ -74,8 +74,10 @@ provider:
             # Recursos para tabla Pagos
             - !GetAtt PagosTable.Arn
             - !Join ["", [!GetAtt PagosTable.Arn, "/*"]]
-            - !Join ["", [!GetAtt PagosTable.Arn, "/index/ReservaIndex"]]
-            - !Join ["", [!GetAtt PagosTable.Arn, "/index/UserIndex"]]
+            - !Join ["", [!GetAtt PagosTable.Arn, "/index/ReservaIdIndex"]]
+            - !Join ["", [!GetAtt PagosTable.Arn, "/index/UserIdIndex"]]
+            - !Join ["", [!GetAtt PagosTable.Arn, "/index/CentroIdIndex"]]
+            - !Join ["", [!GetAtt PagosTable.Arn, "/index/TransactionIdIndex"]]
             # Recursos para tabla Reseñas
             - !GetAtt ResenasTable.Arn
             - !Join ["", [!GetAtt ResenasTable.Arn, "/*"]]
@@ -327,6 +329,10 @@ resources:
             AttributeType: S
           - AttributeName: userId
             AttributeType: S
+          - AttributeName: centroId
+            AttributeType: S
+          - AttributeName: braintreeTransactionId
+            AttributeType: S
         KeySchema:
           - AttributeName: pagoId
             KeyType: HASH
@@ -340,6 +346,18 @@ resources:
           - IndexName: UserIdIndex
             KeySchema:
               - AttributeName: userId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: CentroIdIndex
+            KeySchema:
+              - AttributeName: centroId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: TransactionIdIndex
+            KeySchema:
+              - AttributeName: braintreeTransactionId
                 KeyType: HASH
             Projection:
               ProjectionType: ALL

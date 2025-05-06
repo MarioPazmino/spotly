@@ -1,37 +1,30 @@
 // src/infrastructure/repositories/cuponDescuentoRepository.js
-const AWS = require('aws-sdk');
-const dynamoDB = new AWS.DynamoDB.DocumentClient();
+const dynamoDB = require('../config/dynamodb');
 const CuponDescuento = require('../../domain/entities/cupon-descuento');
-const { DynamoDBClient, QueryCommand } = require('@aws-sdk/client-dynamodb');
-
-// Usar this.CUPONES_DESCUENTO_TABLE en la clase
-
 
 class CuponDescuentoRepository {
   constructor() {
-    this.CUPONES_DESCUENTO_TABLE = process.env.CUPONES_DESCUENTO_TABLE || 'CuponesDescuento';
+    this.CUPONES_DESCUENTO_TABLE = process.env.CUPONES_DESCUENTO_TABLE;
   }
+
   async create(data) {
-    const cupon = new CuponDescuento({ ...data, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-    await dynamoDB.put({ TableName: this.CUPONES_DESCUENTO_TABLE, Item: cupon }).promise();
-    return cupon;
-  }
-  async getById(cuponId) {
-    const result = await dynamoDB.get({ TableName: this.CUPONES_DESCUENTO_TABLE, Key: { cuponId } }).promise();
-    return result.Item ? new CuponDescuento(result.Item) : null;
-  }
-  async findByCodigo(codigo) {
-    const params = {
-      TableName: this.CUPONES_DESCUENTO_TABLE,
-      IndexName: 'CodigoIndex', // Debes tener un GSI en codigo
-      KeyConditionExpression: 'codigo = :codigo',
-      ExpressionAttributeValues: { ':codigo': codigo }
+    const cuponId = data.cuponId || require('uuid').v4();
+    const fechaActual = new Date().toISOString();
+    const cupon = {
+      ...data,
+      cuponId,
+      createdAt: fechaActual,
+      updatedAt: fechaActual
     };
-    const result = await dynamoDB.query(params).promise();
-    return result.Items && result.Items.length ? new CuponDescuento(result.Items[0]) : null;
+    await dynamoDB.put({
+      TableName: this.CUPONES_DESCUENTO_TABLE,
+      Item: cupon
+    }).promise();
+    return new CuponDescuento(cupon);
   }
+
   async update(cuponId, updates) {
-    const allowed = ['centroId', 'codigo', 'tipoDescuento', 'valor', 'fechaInicio', 'fechaFin', 'maximoUsos', 'usosRestantes', 'updatedAt'];
+    const allowed = ['centroId', 'codigo', 'tipoDescuento', 'valor', 'fechaInicio', 'fechaFin', 'maximoUsos', 'updatedAt'];
     const updateExpr = [];
     const exprAttrNames = {};
     const exprAttrValues = {};
@@ -57,9 +50,13 @@ class CuponDescuentoRepository {
     const result = await dynamoDB.update(params).promise();
     return new CuponDescuento(result.Attributes);
   }
-  async delete(cuponId) {
-    await dynamoDB.delete({ TableName: this.CUPONES_DESCUENTO_TABLE, Key: { cuponId } }).promise();
-    return true;
+
+  async getById(cuponId) {
+    const result = await dynamoDB.get({
+      TableName: this.CUPONES_DESCUENTO_TABLE,
+      Key: { cuponId }
+    }).promise();
+    return result.Item ? new CuponDescuento(result.Item) : null;
   }
 
   // Buscar cupón por centroId y código usando el índice CentroIdCodigoIndex
@@ -75,28 +72,6 @@ class CuponDescuentoRepository {
     };
     const result = await dynamoDB.query(params).promise();
     return result.Items && result.Items.length ? new CuponDescuento(result.Items[0]) : null;
-  }
-
-  // Descuenta un uso de forma atómica y segura
-  async descontarUsoSeguro(cuponId) {
-    const params = {
-      TableName: this.CUPONES_DESCUENTO_TABLE,
-      Key: { cuponId },
-      UpdateExpression: 'SET usosRestantes = usosRestantes - :uno',
-      ConditionExpression: 'usosRestantes > :cero',
-      ExpressionAttributeValues: {
-        ':uno': 1,
-        ':cero': 0
-      },
-      ReturnValues: 'ALL_NEW'
-    };
-    try {
-      const result = await dynamoDB.update(params).promise();
-      return new CuponDescuento(result.Attributes);
-    } catch (err) {
-      if (err.code === 'ConditionalCheckFailedException') return null;
-      throw err;
-    }
   }
 
   // Obtener todos los cupones de un centro
