@@ -321,5 +321,14 @@ module.exports = {
     } catch (error) {
       next(error);
     }
-  }
+  },
+
+  /**
+   * Obtener métodos de pago disponibles para un centro deportivo
+   */
+  getMetodosPagoDisponibles: asyncHandler(async (req, res) => {
+    const { centroId } = req.params;
+    const metodosDisponibles = await pagosService.getMetodosPagoDisponibles(centroId);
+    res.json({ metodosDisponibles });
+  }),
 };

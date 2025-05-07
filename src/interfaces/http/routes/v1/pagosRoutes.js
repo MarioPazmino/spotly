@@ -8,6 +8,37 @@ const ComprobanteTransferenciaController = require('../../controllers/v1/uploadI
 const multer = require('multer');
 const { validate: isUuid } = require('uuid');
 const upload = multer({ storage: multer.memoryStorage() });
+const pagosService = require('../../../../infrastructure/services/pagosService');
+
+// Middleware para validar métodos de pago disponibles
+const validarMetodoPagoDisponible = async (req, res, next) => {
+  try {
+    const centroId = req.body.centroId || req.params.centroId;
+    if (!centroId) {
+      return res.status(400).json({ error: 'Se requiere el ID del centro deportivo' });
+    }
+
+    const metodosDisponibles = await pagosService.getMetodosPagoDisponibles(centroId);
+    const metodoPago = req.body.metodoPago;
+
+    // Si es una operación de pago, validar el método
+    if (metodoPago) {
+      if (!metodosDisponibles.includes(metodoPago)) {
+        return res.status(400).json({
+          error: `El método de pago ${metodoPago} no está disponible para este centro deportivo`,
+          metodosDisponibles,
+          mensaje: `Este centro solo acepta: ${metodosDisponibles.join(', ')}`
+        });
+      }
+    }
+
+    // Agregar los métodos disponibles al request para uso posterior
+    req.metodosPagoDisponibles = metodosDisponibles;
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
 
 // Función para validar UUID
 function validateUUID(paramName) {
@@ -22,24 +53,11 @@ function validateUUID(paramName) {
   };
 }
 
-// Middleware para validar roles
-function validarRol(roles) {
-  return (req, res, next) => {
-    const userGroups = req.user.groups || [];
-    const hasValidRole = roles.some(role => userGroups.includes(role));
-    if (!hasValidRole) {
-      return res.status(403).json({
-        message: 'No tienes permiso para realizar esta acción'
-      });
-    }
-    next();
-  };
-}
-
 // Rutas de pagos
 router.post('/', 
   authorization.checkPermission('create:pagos'), 
   validarPagos, 
+  validarMetodoPagoDisponible,
   pagosController.crearPago
 );
 
@@ -128,7 +146,8 @@ router.delete('/:pagoId/comprobante',
 // Rutas de Braintree
 router.get('/braintree/client-token/:centroId', 
   validateUUID('centroId'), 
-  authorization.checkPermission('create:pagos'), 
+  authorization.checkPermission('create:pagos'),
+  validarMetodoPagoDisponible,
   pagosController.generarToken
 );
 
@@ -142,6 +161,13 @@ router.post('/braintree/refund/:transactionId',
   validateUUID('transactionId'),
   authorization.checkPermission('refund:pagos'), 
   pagosController.reembolsar
+);
+
+// Ruta para obtener métodos de pago disponibles
+router.get('/metodos-disponibles/:centroId',
+  validateUUID('centroId'),
+  authorization.checkPermission('read:pagos'),
+  pagosController.getMetodosPagoDisponibles
 );
 
 module.exports = router;

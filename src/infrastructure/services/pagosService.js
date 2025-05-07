@@ -3,14 +3,24 @@ const PagosRepository = require('../repositories/pagosRepository');
 const ReservaRepository = require('../repositories/reservaRepository');
 const Pago = require('../../domain/entities/pagos');
 const braintreeService = require('./braintreeService');
+const CentroDeportivoRepository = require('../repositories/centroDeportivoRepository');
+const { DynamoDB } = require('aws-sdk');
+const dynamoDB = new DynamoDB.DocumentClient();
 
 class PagosService {
   constructor() {
     this.repo = new PagosRepository();
+    this.centroRepo = new CentroDeportivoRepository();
   }
 
   async crearPago(data) {
     try {
+      // Validar que el método de pago esté disponible
+      const metodoValido = await this.validarMetodoPago(data.centroId, data.metodoPago);
+      if (!metodoValido) {
+        throw new Error(`El método de pago ${data.metodoPago} no está disponible para este centro deportivo`);
+      }
+
       // Obtener la reserva
       const reserva = await ReservaRepository.obtenerReservaPorId(data.reservaId);
       if (!reserva) {
@@ -321,6 +331,54 @@ class PagosService {
 
       throw new Error(`Error procesando el pago: ${errorType.message}`);
     }
+  }
+
+  /**
+   * Obtener métodos de pago disponibles para un centro deportivo
+   * @param {string} centroId - ID del centro deportivo
+   * @returns {Promise<Array>} Lista de métodos de pago disponibles
+   */
+  async getMetodosPagoDisponibles(centroId) {
+    try {
+      const params = {
+        TableName: process.env.CENTROS_TABLE,
+        Key: { id: centroId },
+        ProjectionExpression: 'aceptaTarjeta, aceptaTransferencia'
+      };
+
+      const result = await dynamoDB.get(params).promise();
+      const centro = result.Item;
+
+      if (!centro) {
+        throw new Error('Centro deportivo no encontrado');
+      }
+
+      const metodosDisponibles = ['efectivo']; // Efectivo siempre está disponible
+
+      if (centro.aceptaTarjeta) {
+        metodosDisponibles.push('tarjeta');
+      }
+
+      if (centro.aceptaTransferencia) {
+        metodosDisponibles.push('transferencia');
+      }
+
+      return metodosDisponibles;
+    } catch (error) {
+      console.error('Error al obtener métodos de pago disponibles:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Validar si un método de pago está disponible para un centro
+   * @param {string} centroId - ID del centro deportivo
+   * @param {string} metodoPago - Método de pago a validar
+   * @returns {Promise<boolean>} true si el método está disponible
+   */
+  async validarMetodoPago(centroId, metodoPago) {
+    const metodosDisponibles = await this.getMetodosPagoDisponibles(centroId);
+    return metodosDisponibles.includes(metodoPago);
   }
 }
 

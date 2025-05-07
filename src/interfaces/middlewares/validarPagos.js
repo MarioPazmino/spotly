@@ -1,45 +1,57 @@
 //src/interfaces/middlewares/validarPagos.js    
 
-module.exports = function validarPagos(req, res, next) {
-  const { monto, metodoPago, detallesPago } = req.body;
+const validarPagos = (req, res, next) => {
+  const { metodoPago, detallesPago } = req.body;
+  const metodosDisponibles = req.metodosPagoDisponibles || ['efectivo']; // Por defecto, efectivo siempre está disponible
 
-  // Validar formato de monto
-  if (typeof monto !== 'number' || isNaN(monto)) {
-    return res.status(400).json({ error: 'El monto debe ser un número válido' });
+  // Validar que el método de pago sea válido
+  if (!metodoPago || !metodosDisponibles.includes(metodoPago)) {
+    return res.status(400).json({
+      error: 'Método de pago inválido',
+      mensaje: `Métodos permitidos: ${metodosDisponibles.join(', ')}`
+    });
   }
 
-  // Validar formato de método de pago
-  const metodosPermitidos = ['tarjeta', 'transferencia', 'efectivo'];
-  if (!metodoPago || !metodosPermitidos.includes(metodoPago)) {
-    return res.status(400).json({ error: 'Método de pago no válido' });
-  }
-
-  // Validar estructura de detallesPago
+  // Validar que detallesPago sea un objeto
   if (!detallesPago || typeof detallesPago !== 'object') {
-    return res.status(400).json({ error: 'Se requieren detalles del pago' });
-    }
+    return res.status(400).json({
+      error: 'Detalles de pago inválidos',
+      mensaje: 'Los detalles de pago deben ser un objeto'
+    });
+  }
 
-  // Validar estructura según método de pago
+  // Validar campos requeridos según el método de pago
   switch (metodoPago) {
     case 'tarjeta':
       if (!detallesPago.paymentMethodNonce || typeof detallesPago.paymentMethodNonce !== 'string') {
-        return res.status(400).json({ error: 'Se requiere paymentMethodNonce para pagos con tarjeta' });
-    }
+        return res.status(400).json({
+          error: 'Detalles de tarjeta inválidos',
+          mensaje: 'Se requiere un paymentMethodNonce válido para pagos con tarjeta'
+        });
+      }
       break;
 
     case 'transferencia':
-      if (!detallesPago.bancoDestino || typeof detallesPago.bancoDestino !== 'string') {
-        return res.status(400).json({ error: 'Se requiere bancoDestino para transferencias' });
-      }
-      if (!detallesPago.cuentaDestino || typeof detallesPago.cuentaDestino !== 'string') {
-        return res.status(400).json({ error: 'Se requiere cuentaDestino para transferencias' });
+      if (!detallesPago.bancoDestino || !detallesPago.cuentaDestino) {
+        return res.status(400).json({
+          error: 'Detalles de transferencia inválidos',
+          mensaje: 'Se requiere bancoDestino y cuentaDestino para pagos por transferencia'
+        });
       }
       break;
 
     case 'efectivo':
-      // No requiere validación de estructura para efectivo
+      // No se requieren campos adicionales para efectivo
       break;
+
+    default:
+      return res.status(400).json({
+        error: 'Método de pago no soportado',
+        mensaje: `Método ${metodoPago} no está soportado`
+      });
   }
 
   next();
 };
+
+module.exports = validarPagos;

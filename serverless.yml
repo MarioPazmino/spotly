@@ -1,11 +1,16 @@
 # org: mariora
 app: alquiler-canchas-api
 service: alquiler-canchas-api
+
 # Variables comunes para reutilización
 custom:
   stage: ${opt:stage, 'dev'}
   tablePrefix: -${self:custom.stage}
   domain: tucanchasdeportivas.com
+  googleClientId: ${env:GOOGLE_CLIENT_ID, ''}
+  googleClientSecret: ${env:GOOGLE_CLIENT_SECRET, ''}
+  facebookClientId: ${env:FACEBOOK_CLIENT_ID, ''}
+  facebookClientSecret: ${env:FACEBOOK_CLIENT_SECRET, ''}
   cognitoGroups:
     superAdmin: super_admin
     adminCentro: admin_centro
@@ -109,7 +114,6 @@ functions:
     memorySize: 512
     timeout: 900 # 15 minutos máximo para limpieza masiva
     environment:
-      AWS_REGION: ${self:provider.region}
       IMAGENES_CENTROS_BUCKET: spotly-centros-imagenes-${self:custom.stage}
       CANCHAS_TABLE_NAME: ${self:custom.commonEnvVars.CANCHAS_TABLE}
       CENTROS_TABLE_NAME: ${self:custom.commonEnvVars.CENTROS_DEPORTIVOS_TABLE}
@@ -117,9 +121,396 @@ functions:
       - schedule:
           rate: cron(0 3 1 * ? *) # Ejecuta el día 1 de cada mes a las 03:00 UTC
           enabled: true
+  pushNotifications:
+    handler: src/notifications/pushHandler.handler
+    environment:
+      STAGE: ${self:custom.stage}
+    events:
+      - sns: spotly-notifications-${self:custom.stage}
+  cognitoPreSignUp:
+    handler: src/cognito/preSignUp.handler
+    environment:
+      ADMIN_DOMAINS: ${self:custom.domain}
+      COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
+      COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
+  cognitoPostConfirmation:
+    handler: src/cognito/postConfirmation.handler
+    environment:
+      USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
+      COGNITO_USER_POOL_ID: !Ref CognitoUserPool
+      SUPER_ADMIN_GROUP_NAME: ${self:custom.cognitoGroups.superAdmin}
+      ADMIN_CENTRO_GROUP_NAME: ${self:custom.cognitoGroups.adminCentro}
+      CLIENTE_GROUP_NAME: ${self:custom.cognitoGroups.cliente}
+      COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
+      COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
+  cognitoPostAuthentication:
+    handler: src/cognito/postAuthentication.handler
+    environment:
+      USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
+  customMessage:
+    handler: src/cognito/customMessage.handler
+    events:
+      - cognitoUserPool:
+          pool: alquiler-canchas-users-dev
+          trigger: CustomMessage
+          existing: true
 
 resources:
+  Parameters:
+    googleClientId:
+      Type: String
+      Default: ${env:GOOGLE_CLIENT_ID, ''}
+    googleClientSecret:
+      Type: String
+      Default: ${env:GOOGLE_CLIENT_SECRET, ''}
+    facebookClientId:
+      Type: String
+      Default: ${env:FACEBOOK_CLIENT_ID, ''}
+    facebookClientSecret:
+      Type: String
+      Default: ${env:FACEBOOK_CLIENT_SECRET, ''}
+
+  Conditions:
+    HasGoogleCredentials: !Not [!Equals ['', !Ref googleClientId]]
+    HasFacebookCredentials: !Not [!Equals ['', !Ref facebookClientId]]
+
   Resources:
+    #======================================================================================#
+    #===================================== IAM ROLES ======================================#
+    #======================================================================================#
+    CognitoLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          - PolicyName: DynamoDBAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:PutItem
+                    - dynamodb:Query
+                    - dynamodb:Scan
+                    - dynamodb:DeleteItem
+                    - dynamodb:UpdateItem
+                    - dynamodb:GetItem
+                  Resource: 
+                    - !GetAtt UsuariosTable.Arn
+                    - !Join ["", [!GetAtt UsuariosTable.Arn, "/index/*"]]
+          - PolicyName: CognitoAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - cognito-idp:AdminAddUserToGroup
+                    - cognito-idp:AdminRemoveUserFromGroup
+                    - cognito-idp:AdminListGroupsForUser
+                    - cognito-idp:AdminGetUser
+                    - cognito-idp:ListUsers
+                  Resource: !GetAtt CognitoUserPool.Arn
+
+    AdminLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          - PolicyName: DynamoDBAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:Query
+                    - dynamodb:GetItem
+                    - dynamodb:UpdateItem
+                  Resource: !GetAtt UsuariosTable.Arn
+          - PolicyName: CognitoAdminAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - cognito-idp:AdminAddUserToGroup
+                    - cognito-idp:AdminGetUser
+                  Resource: !GetAtt CognitoUserPool.Arn
+
+    #======================================================================================#
+    #===================================== COGNITO =======================================#
+    #======================================================================================#
+    CognitoUserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        UserPoolName: alquiler-canchas-users-${self:custom.stage}
+        AutoVerifiedAttributes:
+          - email
+        UsernameAttributes:
+          - email
+        EmailConfiguration:
+          EmailSendingAccount: COGNITO_DEFAULT
+        VerificationMessageTemplate:
+          DefaultEmailOption: CONFIRM_WITH_CODE
+          EmailSubject: "Verifica tu cuenta en Spotly"
+          EmailMessage: "¡Bienvenido a Spotly! Tu código de verificación es {####}. Este código expirará en 24 horas."
+        AdminCreateUserConfig:
+          AllowAdminCreateUserOnly: false
+          InviteMessageTemplate:
+            EmailMessage: "¡Bienvenido a Spotly! Tu nombre de usuario es {username} y tu contraseña temporal es {####}. Por favor, cambia tu contraseña después de iniciar sesión."
+            EmailSubject: "Bienvenido a Spotly - Tu cuenta ha sido creada"
+        UserPoolAddOns:
+          AdvancedSecurityMode: OFF
+        Schema:
+          - Name: name
+            Required: true
+            Mutable: true
+          - Name: role
+            AttributeDataType: String
+            Mutable: true
+            StringAttributeConstraints:
+              MaxLength: '256'
+            DeveloperOnlyAttribute: false
+          - Name: registration_source
+            AttributeDataType: String
+            Mutable: true
+            StringAttributeConstraints:
+              MaxLength: '256'
+            DeveloperOnlyAttribute: false
+          - Name: pendiente_aprobacion
+            AttributeDataType: String
+            Mutable: true
+            StringAttributeConstraints:
+              MaxLength: '256'
+            DeveloperOnlyAttribute: false
+          - Name: picture
+            AttributeDataType: String
+            Mutable: true
+            StringAttributeConstraints:
+              MaxLength: '2048'
+            DeveloperOnlyAttribute: false
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 8
+            RequireLowercase: true
+            RequireNumbers: true
+            RequireSymbols: false
+            RequireUppercase: true
+        AccountRecoverySetting:
+          RecoveryMechanisms:
+            - Name: verified_email
+              Priority: 1
+        LambdaConfig:
+          PreSignUp: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${self:service}-${self:custom.stage}-cognitoPreSignUp'
+          PostConfirmation: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${self:service}-${self:custom.stage}-cognitoPostConfirmation'
+          PostAuthentication: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${self:service}-${self:custom.stage}-cognitoPostAuthentication'
+          CustomMessage: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${self:service}-${self:custom.stage}-cognitoCustomMessage'
+
+    # Grupos de Cognito
+    SuperAdminGroup:
+      Type: AWS::Cognito::UserPoolGroup
+      DependsOn: CognitoUserPool
+      Properties:
+        GroupName: ${self:custom.cognitoGroups.superAdmin}
+        Description: Grupo para super administradores del sistema
+        UserPoolId: !Ref CognitoUserPool
+        Precedence: 1
+
+    AdminCentroGroup:
+      Type: AWS::Cognito::UserPoolGroup
+      DependsOn: CognitoUserPool
+      Properties:
+        GroupName: ${self:custom.cognitoGroups.adminCentro}
+        Description: Grupo para administradores de centros deportivos
+        UserPoolId: !Ref CognitoUserPool
+        Precedence: 10
+
+    ClienteGroup:
+      Type: AWS::Cognito::UserPoolGroup
+      DependsOn: CognitoUserPool
+      Properties:
+        GroupName: ${self:custom.cognitoGroups.cliente}
+        Description: Grupo para clientes de la app móvil
+        UserPoolId: !Ref CognitoUserPool
+        Precedence: 20
+
+    # Clientes de Cognito
+    CognitoUserPoolWebClient:
+      Type: AWS::Cognito::UserPoolClient
+      DependsOn: CognitoUserPool
+      Properties:
+        ClientName: web-admin-client
+        UserPoolId: !Ref CognitoUserPool
+        GenerateSecret: true
+        ExplicitAuthFlows:
+          - ALLOW_USER_SRP_AUTH
+          - ALLOW_REFRESH_TOKEN_AUTH
+          - ALLOW_USER_PASSWORD_AUTH
+        SupportedIdentityProviders:
+          - COGNITO
+          - Fn::If:
+              - HasGoogleCredentials
+              - Google
+              - !Ref AWS::NoValue
+          - Fn::If:
+              - HasFacebookCredentials
+              - Facebook
+              - !Ref AWS::NoValue
+        CallbackURLs:
+          - https://dashboard.${self:custom.domain}/callback
+        LogoutURLs:
+          - https://dashboard.${self:custom.domain}/logout
+        AllowedOAuthFlows:
+          - code
+          - implicit
+        AllowedOAuthScopes:
+          - email
+          - openid
+          - profile
+        AllowedOAuthFlowsUserPoolClient: true
+        PreventUserExistenceErrors: ENABLED
+        TokenValidityUnits:
+          AccessToken: hours
+          IdToken: hours
+          RefreshToken: days
+        AccessTokenValidity: 8
+        IdTokenValidity: 8
+        RefreshTokenValidity: 30
+        ReadAttributes:
+          - email
+          - name
+          - picture
+          - custom:role
+          - custom:registration_source
+          - custom:pendiente_aprobacion
+        WriteAttributes:
+          - email
+          - name
+          - picture
+          - custom:role
+          - custom:registration_source
+          - custom:pendiente_aprobacion
+
+    CognitoUserPoolMobileClient:
+      Type: AWS::Cognito::UserPoolClient
+      DependsOn: CognitoUserPool
+      Properties:
+        ClientName: react-native-mobile-client
+        UserPoolId: !Ref CognitoUserPool
+        GenerateSecret: false
+        ExplicitAuthFlows:
+          - ALLOW_USER_SRP_AUTH
+          - ALLOW_REFRESH_TOKEN_AUTH
+          - ALLOW_USER_PASSWORD_AUTH
+        SupportedIdentityProviders:
+          - COGNITO
+          - Fn::If:
+              - HasGoogleCredentials
+              - Google
+              - !Ref AWS::NoValue
+          - Fn::If:
+              - HasFacebookCredentials
+              - Facebook
+              - !Ref AWS::NoValue
+        CallbackURLs:
+          - com.spotlyfrontreact://callback
+        LogoutURLs:
+          - com.spotlyfrontreact://logout
+        AllowedOAuthFlows:
+          - code
+          - implicit
+        AllowedOAuthScopes:
+          - email
+          - openid
+          - profile
+        AllowedOAuthFlowsUserPoolClient: true
+        PreventUserExistenceErrors: ENABLED
+        TokenValidityUnits:
+          AccessToken: hours
+          IdToken: hours
+          RefreshToken: days
+        AccessTokenValidity: 24
+        IdTokenValidity: 24
+        RefreshTokenValidity: 30
+        ReadAttributes:
+          - email
+          - name
+          - picture
+          - custom:role
+          - custom:registration_source
+          - custom:pendiente_aprobacion
+        WriteAttributes:
+          - email
+          - name
+          - picture
+          - custom:role
+          - custom:registration_source
+          - custom:pendiente_aprobacion
+
+    # Identity Providers
+    GoogleIdentityProvider:
+      Type: AWS::Cognito::UserPoolIdentityProvider
+      Condition: HasGoogleCredentials
+      DependsOn: 
+        - CognitoUserPool
+        - CognitoUserPoolWebClient
+        - CognitoUserPoolMobileClient
+      Properties:
+        UserPoolId: !Ref CognitoUserPool
+        ProviderName: Google
+        ProviderType: Google
+        ProviderDetails:
+          client_id: ${self:custom.googleClientId}
+          client_secret: ${self:custom.googleClientSecret}
+          authorize_scopes: "email profile openid"
+        AttributeMapping:
+          email: email
+          name: name
+          picture: picture
+
+    FacebookIdentityProvider:
+      Type: AWS::Cognito::UserPoolIdentityProvider
+      Condition: HasFacebookCredentials
+      DependsOn: 
+        - CognitoUserPool
+        - CognitoUserPoolWebClient
+        - CognitoUserPoolMobileClient
+      Properties:
+        UserPoolId: !Ref CognitoUserPool
+        ProviderName: Facebook
+        ProviderType: Facebook
+        ProviderDetails:
+          client_id: ${self:custom.facebookClientId}
+          client_secret: ${self:custom.facebookClientSecret}
+          authorize_scopes: "email public_profile"
+        AttributeMapping:
+          email: email
+          name: name
+          picture: picture
+
+    # Dominio para la UI de Cognito
+    CognitoUserPoolDomain:
+      Type: AWS::Cognito::UserPoolDomain
+      DependsOn: CognitoUserPool
+      Properties:
+        Domain: spotly-${self:custom.stage}
+        UserPoolId: !Ref CognitoUserPool
+
     #======================================================================================#
     #=============================== API Gateway y Dominios ===============================#
     #======================================================================================#
@@ -390,7 +781,7 @@ resources:
     ResenasTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: ${self:provider.environment.DYNAMODB_TABLE}
+        TableName: Resenas${self:custom.tablePrefix}
         AttributeDefinitions:
           - AttributeName: resenaId
             AttributeType: S
@@ -483,6 +874,11 @@ resources:
       Type: AWS::S3::Bucket
       Properties:
         BucketName: spotly-centros-imagenes-${self:custom.stage}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+          BlockPublicPolicy: false
+          IgnorePublicAcls: false
+          RestrictPublicBuckets: false
         CorsConfiguration:
           CorsRules:
             - AllowedOrigins:
@@ -495,371 +891,28 @@ resources:
                 - POST
                 - DELETE
               MaxAge: 3000
+
     ImagenesCentrosDeportivosBucketPolicy:
       Type: AWS::S3::BucketPolicy
       Properties:
         Bucket: !Ref ImagenesCentrosDeportivosBucket
         PolicyDocument:
+          Version: '2012-10-17'
           Statement:
             - Effect: Allow
               Principal: '*'
               Action:
                 - s3:GetObject
               Resource: !Join ['', ['arn:aws:s3:::', !Ref ImagenesCentrosDeportivosBucket, '/*']]
+
     #======================================================================================#
     #====================================COGNITO==========================================#
     #======================================================================================#
-    CognitoUserPool:
-      Type: AWS::Cognito::UserPool
-      Properties:
-        UserPoolName: alquiler-canchas-users-${self:custom.stage}
-        AutoVerifiedAttributes:
-          - email
-        UsernameAttributes:
-          - email
-        EmailConfiguration:
-          EmailSendingAccount: COGNITO_DEFAULT
-        Schema:
-          - Name: name
-            Required: true
-            Mutable: true
-          - Name: role
-            AttributeDataType: String
-            Mutable: true
-            StringAttributeConstraints:
-              MaxLength: '256'
-            DeveloperOnlyAttribute: false
-          - Name: registration_source
-            AttributeDataType: String
-            Mutable: true
-            StringAttributeConstraints:
-              MaxLength: '256'
-            DeveloperOnlyAttribute: false
-          - Name: pendiente_aprobacion
-            AttributeDataType: String
-            Mutable: true
-            StringAttributeConstraints:
-              MaxLength: '256'
-            DeveloperOnlyAttribute: false
-          - Name: picture
-            AttributeDataType: String
-            Mutable: true
-            StringAttributeConstraints:
-              MaxLength: '2048'
-            DeveloperOnlyAttribute: false
-        Policies:
-          PasswordPolicy:
-            MinimumLength: 8
-            RequireLowercase: true
-            RequireNumbers: true
-            RequireSymbols: false
-            RequireUppercase: true
-        AccountRecoverySetting:
-          RecoveryMechanisms:
-            - Name: verified_email
-              Priority: 1
-        LambdaConfig:
-          PreSignUp: !GetAtt CognitoPreSignUpFunction.Arn
-          PostConfirmation: !GetAtt CognitoPostConfirmationFunction.Arn
-          PreAuthentication: !Ref AWS::NoValue
-          PostAuthentication: !GetAtt CognitoPostAuthenticationFunction.Arn
-    # Definición de los grupos de usuarios usando variables
-    SuperAdminGroup:
-      Type: AWS::Cognito::UserPoolGroup
-      Properties:
-        GroupName: ${self:custom.cognitoGroups.superAdmin}
-        Description: Grupo para super administradores del sistema
-        UserPoolId: !Ref CognitoUserPool
-        Precedence: 1
-    AdminCentroGroup:
-      Type: AWS::Cognito::UserPoolGroup
-      Properties:
-        GroupName: ${self:custom.cognitoGroups.adminCentro}
-        Description: Grupo para administradores de centros deportivos
-        UserPoolId: !Ref CognitoUserPool
-        Precedence: 10
-    ClienteGroup:
-      Type: AWS::Cognito::UserPoolGroup
-      Properties:
-        GroupName: ${self:custom.cognitoGroups.cliente}
-        Description: Grupo para clientes de la app móvil
-        UserPoolId: !Ref CognitoUserPool
-        Precedence: 20
-    # Permisos para las funciones Lambda de Cognito
-    CognitoPreSignUpPermission:
-      Type: AWS::Lambda::Permission
-      Properties:
-        Action: lambda:InvokeFunction
-        FunctionName: !GetAtt CognitoPreSignUpFunction.Arn
-        Principal: cognito-idp.amazonaws.com
-        SourceArn: !GetAtt CognitoUserPool.Arn      
-    CognitoPostConfirmationPermission:
-      Type: AWS::Lambda::Permission
-      Properties:
-        Action: lambda:InvokeFunction
-        FunctionName: !GetAtt CognitoPostConfirmationFunction.Arn
-        Principal: cognito-idp.amazonaws.com
-        SourceArn: !GetAtt CognitoUserPool.Arn  
-    CognitoPostAuthenticationPermission:
-      Type: AWS::Lambda::Permission
-      Properties:
-        Action: lambda:InvokeFunction
-        FunctionName: !GetAtt CognitoPostAuthenticationFunction.Arn
-        Principal: cognito-idp.amazonaws.com
-        SourceArn: !GetAtt CognitoUserPool.Arn    
-    # Dominio para la UI de Cognito
-    CognitoUserPoolDomain:
-      Type: AWS::Cognito::UserPoolDomain
-      Properties:
-        Domain: ${self:custom.domain}-${self:custom.stage}
-        UserPoolId: !Ref CognitoUserPool 
-    # Identity Providers
-    GoogleIdentityProvider:
-      Type: AWS::Cognito::UserPoolIdentityProvider
-      Properties:
-        UserPoolId: !Ref CognitoUserPool
-        ProviderName: Google
-        ProviderType: Google
-        ProviderDetails:
-          client_id: ${env:GOOGLE_CLIENT_ID}
-          client_secret: ${env:GOOGLE_CLIENT_SECRET}
-          authorize_scopes: "email profile openid"
-        AttributeMapping:
-          email: email
-          name: name
-          picture: picture
-    FacebookIdentityProvider:
-      Type: AWS::Cognito::UserPoolIdentityProvider
-      Properties:
-        UserPoolId: !Ref CognitoUserPool
-        ProviderName: Facebook
-        ProviderType: Facebook
-        ProviderDetails:
-          client_id: ${env:FACEBOOK_CLIENT_ID}
-          client_secret: ${env:FACEBOOK_CLIENT_SECRET}
-          authorize_scopes: "email public_profile"
-        AttributeMapping:
-          email: email
-          name: name
-          picture: picture
-    # Configuración base para clientes de Cognito
-    CognitoUserPoolWebClient:
-      Type: AWS::Cognito::UserPoolClient
-      DependsOn:
-        - GoogleIdentityProvider
-        - FacebookIdentityProvider
-      Properties:
-        ClientName: web-admin-client
-        UserPoolId: !Ref CognitoUserPool
-        GenerateSecret: true
-        ExplicitAuthFlows:
-          - ALLOW_USER_SRP_AUTH
-          - ALLOW_REFRESH_TOKEN_AUTH
-          - ALLOW_USER_PASSWORD_AUTH
-        SupportedIdentityProviders:
-          - COGNITO
-          - Google
-          - Facebook
-        CallbackURLs:
-          - https://dashboard.${self:custom.domain}/callback
-        LogoutURLs:
-          - https://dashboard.${self:custom.domain}/logout
-        AllowedOAuthFlows:
-          - code
-          - implicit
-        AllowedOAuthScopes:
-          - email
-          - openid
-          - profile
-        AllowedOAuthFlowsUserPoolClient: true
-        PreventUserExistenceErrors: ENABLED
-        TokenValidityUnits:
-          AccessToken: hours
-          IdToken: hours
-          RefreshToken: days
-        AccessTokenValidity: 8
-        IdTokenValidity: 8
-        RefreshTokenValidity: 30
-        ReadAttributes:
-          - email
-          - name
-          - picture
-          - custom:role
-          - custom:registration_source
-          - custom:pendiente_aprobacion
-        WriteAttributes:
-          - email
-          - name
-          - picture
-          - custom:role
-          - custom:registration_source
-          - custom:pendiente_aprobacion
-    # App Client para Mobile con configuración específica
-    CognitoUserPoolMobileClient:
-      Type: AWS::Cognito::UserPoolClient
-      DependsOn: 
-        - GoogleIdentityProvider
-        - FacebookIdentityProvider
-      Properties:
-        ClientName: react-native-mobile-client
-        UserPoolId: !Ref CognitoUserPool
-        GenerateSecret: false
-        ExplicitAuthFlows:
-          - ALLOW_USER_SRP_AUTH
-          - ALLOW_REFRESH_TOKEN_AUTH
-          - ALLOW_USER_PASSWORD_AUTH
-        SupportedIdentityProviders:
-          - COGNITO
-          - Google
-          - Facebook
-        CallbackURLs:
-          - com.spotlyfrontreact://callback
-        LogoutURLs:
-          - com.spotlyfrontreact://logout
-        AllowedOAuthFlows:
-          - code
-          - implicit
-        AllowedOAuthScopes:
-          - email
-          - openid
-          - profile
-        AllowedOAuthFlowsUserPoolClient: true
-        PreventUserExistenceErrors: ENABLED
-        TokenValidityUnits:
-          AccessToken: hours
-          IdToken: hours
-          RefreshToken: days
-        AccessTokenValidity: 24  # Diferente del Web Client
-        IdTokenValidity: 24      # Diferente del Web Client
-        RefreshTokenValidity: 30
-        ReadAttributes:
-          - email
-          - name
-          - picture
-          - custom:role
-          - custom:registration_source
-          - custom:pendiente_aprobacion
-        WriteAttributes:
-          - email
-          - name
-          - picture
-          - custom:role
-          - custom:registration_source
-          - custom:pendiente_aprobacion
-    # Funciones Lambda con referencia reutilizable a variables de entorno
-    CognitoPreSignUpFunction:
-      Type: AWS::Lambda::Function
-      Properties:
-        Handler: src/cognito/preSignUp.handler
-        Runtime: nodejs18.x
-        Role: !GetAtt CognitoLambdaRole.Arn
-        Environment:
-          Variables:
-            ADMIN_DOMAINS: ${self:custom.domain}
-            COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
-            COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
-    CognitoPostConfirmationFunction:
-      Type: AWS::Lambda::Function
-      Properties:
-        Handler: src/cognito/postConfirmation.handler
-        Runtime: nodejs18.x
-        Role: !GetAtt CognitoLambdaRole.Arn
-        Environment:
-          Variables:
-            USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
-            COGNITO_USER_POOL_ID: !Ref CognitoUserPool
-            SUPER_ADMIN_GROUP_NAME: ${self:custom.cognitoGroups.superAdmin}
-            ADMIN_CENTRO_GROUP_NAME: ${self:custom.cognitoGroups.adminCentro}
-            CLIENTE_GROUP_NAME: ${self:custom.cognitoGroups.cliente}
-            COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
-            COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
-    CognitoPostAuthenticationFunction:
-      Type: AWS::Lambda::Function
-      Properties:
-        Handler: src/cognito/postAuthentication.handler
-        Runtime: nodejs18.x
-        Role: !GetAtt CognitoLambdaRole.Arn
-        Environment:
-          Variables:
-            USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
-    # Roles IAM optimizados
-    CognitoLambdaRole:
-      Type: AWS::IAM::Role
-      Properties:
-        AssumeRolePolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Principal:
-                Service: lambda.amazonaws.com
-              Action: sts:AssumeRole
-        ManagedPolicyArns:
-          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        Policies:
-          - PolicyName: DynamoDBAccess
-            PolicyDocument:
-              Version: '2012-10-17'
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - dynamodb:PutItem
-                    - dynamodb:Query
-                    - dynamodb:Scan
-                    - dynamodb:DeleteItem
-                    - dynamodb:UpdateItem
-                    - dynamodb:GetItem
-                  Resource: 
-                    - !GetAtt UsuariosTable.Arn
-                    - !Join ["", [!GetAtt UsuariosTable.Arn, "/index/*"]]
-          - PolicyName: CognitoAccess
-            PolicyDocument:
-              Version: '2012-10-17'
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - cognito-idp:AdminAddUserToGroup
-                    - cognito-idp:AdminRemoveUserFromGroup
-                    - cognito-idp:AdminListGroupsForUser
-                    - cognito-idp:AdminGetUser
-                    - cognito-idp:ListUsers
-                  Resource: !GetAtt CognitoUserPool.Arn
-    AdminLambdaRole:
-      Type: AWS::IAM::Role
-      Properties:
-        AssumeRolePolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Principal:
-                Service: lambda.amazonaws.com
-              Action: sts:AssumeRole
-        ManagedPolicyArns:
-          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        Policies:
-          - PolicyName: DynamoDBAccess
-            PolicyDocument:
-              Version: '2012-10-17'
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - dynamodb:Query
-                    - dynamodb:GetItem
-                    - dynamodb:UpdateItem
-                  Resource: !GetAtt UsuariosTable.Arn
-          - PolicyName: CognitoAdminAccess
-            PolicyDocument:
-              Version: '2012-10-17'
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - cognito-idp:AdminAddUserToGroup
-                    - cognito-idp:AdminGetUser
-                  Resource: !GetAtt CognitoUserPool.Arn
     # SNS Topic para notificaciones
     NotificationsTopic:
       Type: AWS::SNS::Topic
       Properties:
-        TopicName: spotly-notifications-${self:custom.stage}
+        TopicName: ${self:service}-notifications-${self:custom.stage}
         DisplayName: Spotly Notifications
         KmsMasterKeyId: alias/aws/sns
 
@@ -878,28 +931,6 @@ resources:
               Resource: !Ref NotificationsTopic
         Topics:
           - !Ref NotificationsTopic
-
-    # Suscripción para notificaciones push (ejemplo)
-    PushNotificationsSubscription:
-      Type: AWS::SNS::Subscription
-      Properties:
-        Protocol: application
-        Endpoint: !GetAtt PushNotificationsEndpoint.Arn
-        TopicArn: !Ref NotificationsTopic
-
-    # Lambda para manejar notificaciones push
-    PushNotificationsEndpoint:
-      Type: AWS::Lambda::Function
-      Properties:
-        Handler: src/notifications/pushHandler.handler
-        Runtime: nodejs18.x
-        Role: !GetAtt NotificationsLambdaRole.Arn
-        Environment:
-          Variables:
-            STAGE: ${self:custom.stage}
-        Events:
-          - SNS:
-              TopicArn: !Ref NotificationsTopic
 
     # Rol IAM para la función Lambda de notificaciones
     NotificationsLambdaRole:
@@ -924,26 +955,25 @@ resources:
                     - sns:Publish
                   Resource: !Ref NotificationsTopic
 
-# Outputs para fácil referencia de recursos importantes
-Outputs:
-  UserPoolId:
-    Value: !Ref CognitoUserPool
-    Description: ID del Pool de Usuarios de Cognito
-  WebClientId:
-    Value: !Ref CognitoUserPoolWebClient
-    Description: ID del cliente web para aplicación administrativa
-  MobileClientId:
-    Value: !Ref CognitoUserPoolMobileClient
-    Description: ID del cliente móvil para aplicación React Native
-  ApiEndpoint:
-    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
-    Description: URL de la API HTTP Gateway
-  CustomDomainEndpoint:
-    Value: !Sub https://api.${self:custom.domain}
-    Description: URL personalizada para la API
-  NotificationsTopicArn:
-    Description: ARN del topic de SNS para notificaciones
-    Value: !Ref NotificationsTopic
-  NotificationsTopicName:
-    Description: Nombre del topic de SNS para notificaciones
-    Value: !GetAtt NotificationsTopic.TopicName
+  Outputs:
+    UserPoolId:
+      Value: !Ref CognitoUserPool
+      Description: ID del Pool de Usuarios de Cognito
+    WebClientId:
+      Value: !Ref CognitoUserPoolWebClient
+      Description: ID del cliente web para aplicación administrativa
+    MobileClientId:
+      Value: !Ref CognitoUserPoolMobileClient
+      Description: ID del cliente móvil para aplicación React Native
+    ApiEndpoint:
+      Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+      Description: URL de la API HTTP Gateway
+    CustomDomainEndpoint:
+      Value: !Sub https://api.${self:custom.domain}
+      Description: URL personalizada para la API
+    NotificationsTopicArn:
+      Description: ARN del topic de SNS para notificaciones
+      Value: !Ref NotificationsTopic
+    NotificationsTopicName:
+      Description: Nombre del topic de SNS para notificaciones
+      Value: !GetAtt NotificationsTopic.TopicName
