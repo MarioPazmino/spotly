@@ -32,7 +32,7 @@ custom:
     ADMIN_CENTRO_GROUP_NAME: ${self:custom.cognitoGroups.adminCentro}
     CLIENTE_GROUP_NAME: ${self:custom.cognitoGroups.cliente}
     AWS_REGION: us-east-1
-    ADMIN_DOMAINS: "${self:custom.domain}"
+    ADMIN_DOMAINS: "${self:custom.domain},gmail.com"
 
 provider:
   name: aws
@@ -129,10 +129,13 @@ functions:
       - sns: spotly-notifications-${self:custom.stage}
   cognitoPreSignUp:
     handler: src/cognito/preSignUp.handler
+    role: CognitoLambdaRole
     environment:
-      ADMIN_DOMAINS: ${self:custom.domain}
+      ADMIN_DOMAINS: "${self:custom.domain},gmail.com"
       COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
       COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
+      USUARIOS_TABLE: ${self:custom.commonEnvVars.USUARIOS_TABLE}
+    logRetentionInDays: 14
   cognitoPostConfirmation:
     handler: src/cognito/postConfirmation.handler
     environment:
@@ -217,7 +220,21 @@ resources:
                     - cognito-idp:AdminListGroupsForUser
                     - cognito-idp:AdminGetUser
                     - cognito-idp:ListUsers
+                    - cognito-idp:AdminCreateUser
+                    - cognito-idp:AdminSetUserPassword
+                    - cognito-idp:AdminUpdateUserAttributes
                   Resource: !GetAtt CognitoUserPool.Arn
+          - PolicyName: CloudWatchLogs
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource: 
+                    - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${self:service}-${self:custom.stage}-*:*'
 
     AdminLambdaRole:
       Type: AWS::IAM::Role

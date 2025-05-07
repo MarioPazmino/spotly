@@ -6,15 +6,47 @@ exports.handler = async (event, context) => {
   try {
     console.log('PreSignUp event:', JSON.stringify(event, null, 2));
     
+    // Si es una creación desde la consola de AWS, permitir sin validaciones
+    if (event.triggerSource === 'PreSignUp_AdminCreateUser') {
+      console.log('Creación de usuario desde consola AWS - permitiendo sin validaciones');
+      // Añadir atributos personalizados para usuarios creados desde la consola
+      event.request.userAttributes['custom:role'] = 'super_admin';
+      event.request.userAttributes['custom:registration_source'] = 'console';
+      event.request.userAttributes['custom:pendiente_aprobacion'] = 'false';
+      return event;
+    }
+    
     // Extraer datos relevantes
     const { clientId } = event.callerContext;
     const { email } = event.request.userAttributes;
     const domain = email.split('@')[1];
     
+    console.log('Datos extraídos:', {
+      clientId,
+      email,
+      domain,
+      ADMIN_DOMAINS: process.env.ADMIN_DOMAINS
+    });
+    
     // Verificar tipo de cliente
     const isWebRegistration = clientId === process.env.COGNITO_WEB_CLIENT_ID;
     const isMobileRegistration = clientId === process.env.COGNITO_MOBILE_CLIENT_ID;
-    const isAdminDomain = domain === process.env.ADMIN_DOMAINS;
+    
+    console.log('Tipo de registro:', {
+      isWebRegistration,
+      isMobileRegistration,
+      COGNITO_WEB_CLIENT_ID: process.env.COGNITO_WEB_CLIENT_ID,
+      COGNITO_MOBILE_CLIENT_ID: process.env.COGNITO_MOBILE_CLIENT_ID
+    });
+    
+    // Obtener dominios permitidos y convertirlos en array
+    const allowedDomains = process.env.ADMIN_DOMAINS.split(',').map(d => d.trim());
+    const isAdminDomain = allowedDomains.includes(domain);
+
+    console.log('Validación de dominio:', {
+      allowedDomains,
+      isAdminDomain
+    });
 
     // Validaciones según el cliente
     if (isWebRegistration && !isAdminDomain) {
@@ -40,6 +72,8 @@ exports.handler = async (event, context) => {
       pendiente_aprobacion: isWebRegistration && !isAdminDomain ? 'true' : 'false',
       registration_source: isWebRegistration ? 'web' : 'mobile',
     };
+
+    console.log('Atributos a asignar:', userAttributes);
 
     // Añadir atributos personalizados a la solicitud
     for (const [key, value] of Object.entries(userAttributes)) {
