@@ -1,4 +1,22 @@
-const { sanitizeResena } = require('../../../utils/sanitizeInput');
+// Implementación local de sanitizeResena para evitar problemas de importación en Lambda
+const sanitizeResena = (data) => {
+  if (!data) return {};
+  
+  // Crear una copia para no modificar el objeto original
+  const sanitized = { ...data };
+  
+  // Sanitizar campos de texto
+  if (sanitized.comentario) {
+    sanitized.comentario = sanitized.comentario.toString().trim();
+  }
+  
+  // Convertir calificación a número
+  if (sanitized.calificacion) {
+    sanitized.calificacion = Number(sanitized.calificacion);
+  }
+  
+  return sanitized;
+};
 
 const validarResena = (req, res, next) => {
   try {

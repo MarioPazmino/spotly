@@ -11,8 +11,9 @@ const imagenCentroService = require('./imagenCentroService');
 
 class CentroDeportivoService {
   constructor() {
-    this.repo = new CentroDeportivoRepository();
-    this.userRepo = new UserRepository();
+    // Ambos repositorios ya son instancias, no necesitamos usar 'new'
+    this.repo = CentroDeportivoRepository;
+    this.userRepo = UserRepository;
   }
 
   async listCentros(filters = {}, options = {}) {

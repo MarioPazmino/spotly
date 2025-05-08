@@ -25,6 +25,28 @@ class AuthorizationMiddleware {
       ]
     };
   }
+  
+  // Middleware de autenticación para Express
+  autenticar(req, res, next) {
+    try {
+      // Verificar si el usuario está autenticado
+      if (!req.user || !req.user.sub) {
+        return res.status(401).json({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'No estás autenticado'
+        });
+      }
+      next();
+    } catch (error) {
+      console.error('Error en autenticación:', error);
+      return res.status(401).json({
+        statusCode: 401,
+        error: 'Unauthorized',
+        message: 'Error de autenticación'
+      });
+    }
+  }
 
   hasPermission(userGroups, requiredPermission) {
     return userGroups.some(group => {

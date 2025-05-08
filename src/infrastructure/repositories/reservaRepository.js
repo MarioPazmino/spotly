@@ -3,6 +3,8 @@ const { DynamoDB } = require('aws-sdk');
 const { v4: uuidv4 } = require('uuid');
 const Reserva = require('../../domain/entities/reserva');
 const Boom = require('@hapi/boom');
+const HorariosRepository = require('./horariosRepository');
+const CuponDescuentoRepository = require('./cuponDescuentoRepository');
 
 class ReservaRepository {
   constructor() {
@@ -13,7 +15,6 @@ class ReservaRepository {
   async crearReserva(data) {
     // Validar cupón si se aplica
     if (data.codigoPromoAplicado) {
-      const CuponDescuentoRepository = require('./cuponDescuentoRepository');
       const cuponRepo = new CuponDescuentoRepository();
       const cupon = await cuponRepo.findByCodigo(data.codigoPromoAplicado);
       if (!cupon) {
@@ -28,7 +29,7 @@ class ReservaRepository {
     }
 
     // Validar que los horarioIds no estén ocupados
-    const horariosRepository = require('./horariosRepository');
+    const horariosRepository = new HorariosRepository();
     if (!Array.isArray(data.horarioIds) || data.horarioIds.length === 0) {
       throw Boom.badRequest('La reserva debe incluir al menos un horario.');
     }
@@ -132,7 +133,6 @@ class ReservaRepository {
   async actualizarReserva(reservaId, datosActualizados) {
     // Validar cupón si se aplica
     if (datosActualizados.codigoPromoAplicado) {
-      const CuponDescuentoRepository = require('./cuponDescuentoRepository');
       const cuponRepo = new CuponDescuentoRepository();
       const cupon = await cuponRepo.findByCodigo(datosActualizados.codigoPromoAplicado);
       if (!cupon) {
@@ -147,7 +147,7 @@ class ReservaRepository {
     }
 
     // Si se cambian los horarioIds, validar y actualizar horarios
-    const horariosRepository = require('./horariosRepository');
+    const horariosRepository = new HorariosRepository();
     let horariosAntiguos = [];
     if (datosActualizados.horarioIds && Array.isArray(datosActualizados.horarioIds)) {
       // 1. Obtener la reserva actual para saber los horarios antiguos
@@ -177,7 +177,6 @@ class ReservaRepository {
     }
 
     // Si se cambian los horarioIds, validar que los nuevos no estén ocupados
-    const horariosRepository = require('./horariosRepository');
     if (datosActualizados.horarioIds && Array.isArray(datosActualizados.horarioIds)) {
       for (const horarioId of datosActualizados.horarioIds) {
         const horario = await horariosRepository.getById(horarioId);

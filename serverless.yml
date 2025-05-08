@@ -2,6 +2,10 @@
 app: alquiler-canchas-api
 service: alquiler-canchas-api
 
+package:
+  include:
+    - node_modules/multer/**
+
 # Variables comunes para reutilización
 custom:
   stage: ${opt:stage, 'dev'}
@@ -31,7 +35,6 @@ custom:
     SUPER_ADMIN_GROUP_NAME: ${self:custom.cognitoGroups.superAdmin}
     ADMIN_CENTRO_GROUP_NAME: ${self:custom.cognitoGroups.adminCentro}
     CLIENTE_GROUP_NAME: ${self:custom.cognitoGroups.cliente}
-    AWS_REGION: us-east-1
     ADMIN_DOMAINS: "${self:custom.domain},gmail.com"
 
 provider:
@@ -41,6 +44,7 @@ provider:
   environment:
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
     NOTIFICATIONS_TOPIC_ARN: !Ref NotificationsTopic
+    IMAGENES_CENTROS_BUCKET: spotly-centros-imagenes-${self:custom.stage}
   iam:
     role:
       statements:
@@ -63,7 +67,8 @@ provider:
             - !GetAtt CanchasTable.Arn
             - !Join ["", [!GetAtt CanchasTable.Arn, "/*"]]
             # Recursos para tabla Usuarios
-            - !GetAtt UsuariosTable.Arn  
+            - !GetAtt UsuariosTable.Arn
+            - !Join ["", [!GetAtt UsuariosTable.Arn, "/*"]]
             - !Join ["", [!GetAtt UsuariosTable.Arn, "/index/EmailIndex"]]
             - !Join ["", [!GetAtt UsuariosTable.Arn, "/index/PendienteAprobacionIndex"]]
             # Recursos para tabla Horarios
@@ -101,10 +106,37 @@ provider:
             - sns:GetTopicAttributes
             - sns:ListSubscriptionsByTopic
           Resource: !Ref NotificationsTopic
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+            - s3:DeleteObject
+            - s3:ListBucket
+          Resource:
+            - !GetAtt ImagenesCentrosDeportivosBucket.Arn
+            - !Join ["", [!GetAtt ImagenesCentrosDeportivosBucket.Arn, "/*"]]
 
 functions:
   api:
     handler: handler.api
+    environment:
+      STAGE: ${self:custom.stage}
+      RESERVAS_TABLE: Reservas${self:custom.tablePrefix}
+      CENTROS_DEPORTIVOS_TABLE: CentrosDeportivos${self:custom.tablePrefix}
+      CANCHAS_TABLE: Canchas${self:custom.tablePrefix}
+      USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
+      SCHEDULES_TABLE: Horarios${self:custom.tablePrefix}
+      PAGOS_TABLE: Pagos${self:custom.tablePrefix}
+      RESENAS_TABLE: Resenas${self:custom.tablePrefix}
+      CUPONES_DESCUENTO_TABLE: CuponesDescuento${self:custom.tablePrefix}
+      COGNITO_USER_POOL_ID: !Ref CognitoUserPool
+      COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
+      COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
+      SUPER_ADMIN_GROUP_NAME: ${self:custom.cognitoGroups.superAdmin}
+      ADMIN_CENTRO_GROUP_NAME: ${self:custom.cognitoGroups.adminCentro}
+      CLIENTE_GROUP_NAME: ${self:custom.cognitoGroups.cliente}
+      ADMIN_DOMAINS: "${self:custom.domain},gmail.com"
+      IMAGENES_CENTROS_BUCKET: spotly-centros-imagenes-${self:custom.stage}
     events:
       - httpApi:
           path: /{proxy+}
@@ -148,8 +180,12 @@ functions:
       COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
   cognitoPostAuthentication:
     handler: src/cognito/postAuthentication.handler
+    role: !GetAtt CognitoLambdaRole.Arn
     environment:
       USUARIOS_TABLE: Usuarios${self:custom.tablePrefix}
+      COGNITO_USER_POOL_ID: !Ref CognitoUserPool
+      COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
+      COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
   customMessage:
     handler: src/cognito/customMessage.handler
     events:
@@ -157,6 +193,7 @@ functions:
           pool: alquiler-canchas-users-dev
           trigger: CustomMessage
           existing: true
+    role: !GetAtt IamRoleCustomResources.Arn
 
 resources:
   Parameters:
@@ -178,6 +215,32 @@ resources:
     HasFacebookCredentials: !Not [!Equals ['', !Ref facebookClientId]]
 
   Resources:
+    # Rol para recursos personalizados con permisos adicionales
+    IamRoleCustomResources:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          - PolicyName: CustomResourcesAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - lambda:AddPermission
+                    - lambda:RemovePermission
+                    - lambda:GetPolicy
+                    - cognito-idp:*
+                  Resource: '*'
+
     #======================================================================================#
     #===================================== IAM ROLES ======================================#
     #======================================================================================#

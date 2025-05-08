@@ -5,9 +5,9 @@ const CentroDeportivoRepository = require('../repositories/centroDeportivoReposi
 
 class ResenaService {
   constructor() {
-    this.resenaRepository = new ResenaRepository();
-    this.canchaRepository = new CanchaRepository();
-    this.centroRepository = new CentroDeportivoRepository();
+    this.resenaRepository = ResenaRepository;
+    this.canchaRepository = CanchaRepository;
+    this.centroRepository = CentroDeportivoRepository;
   }
 
   async crearResena(resenaData) {

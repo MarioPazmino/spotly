@@ -1,14 +1,12 @@
 //src/infrastructure/repositories/pagosRepository.js
 const { v4: uuidv4 } = require('uuid');
 const Pago = require('../../domain/entities/pagos');
-const { DynamoDB } = require('aws-sdk');
 const AWS = require('aws-sdk');
 
 class PagosRepository {
   constructor() {
     this.tableName = process.env.PAGOS_TABLE || 'Pagos';
-    this.dynamoDb = new DynamoDB.DocumentClient();
-    this.dynamoDB = new AWS.DynamoDB.DocumentClient();
+    this.dynamoDb = new AWS.DynamoDB.DocumentClient();
   }
 
   async crearPago(data) {

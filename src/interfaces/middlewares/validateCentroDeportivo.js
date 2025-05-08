@@ -234,7 +234,7 @@ const validateCentroQuery = (req, res, next) => {
   }
 };
 
-exports.validateImagenes = (req, res, next) => {
+const validateImagenes = (req, res, next) => {
   if (!req.files || req.files.length === 0) {
     return next(Boom.badRequest('No se proporcionaron archivos'));
   }

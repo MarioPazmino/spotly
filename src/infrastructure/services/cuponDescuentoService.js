@@ -5,13 +5,13 @@ const CentroDeportivoRepository = require('../repositories/centroDeportivoReposi
 const { esHoraEnRango, normalizarFechaGuayaquil, estaEnRango } = require('../../utils/fechas');
 
 class CuponDescuentoService {
-  constructor(repo = new CuponDescuentoRepository()) {
+  constructor(repo = CuponDescuentoRepository) {
     this.repo = repo;
   }
   async create(data, userId) {
     // Validar existencia del centro deportivo
-    const centroRepo = new CentroDeportivoRepository();
-    const centro = await centroRepo.findById(data.centroId);
+    // CentroDeportivoRepository ya exporta una instancia, no necesitamos usar 'new'
+    const centro = await CentroDeportivoRepository.findById(data.centroId);
     if (!centro) throw new Error('El centroId asociado no existe');
     // Validar que solo el admin del centro pueda crear cupones
     if (!userId || centro.adminId !== userId) {
@@ -49,8 +49,8 @@ class CuponDescuentoService {
     // Validar que solo el admin del centro pueda actualizar cupones
     const cupon = await this.repo.getById(cuponId);
     if (!cupon) throw new Error('Cupón no encontrado');
-    const centroRepo = new CentroDeportivoRepository();
-    const centro = await centroRepo.findById(cupon.centroId);
+    // CentroDeportivoRepository ya exporta una instancia, no necesitamos usar 'new'
+    const centro = await CentroDeportivoRepository.findById(cupon.centroId);
     if (!userId || centro.adminId !== userId) {
       throw new Error('Solo el administrador del centro puede actualizar cupones');
     }

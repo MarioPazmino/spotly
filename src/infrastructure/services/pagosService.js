@@ -10,7 +10,8 @@ const dynamoDB = new DynamoDB.DocumentClient();
 class PagosService {
   constructor() {
     this.repo = new PagosRepository();
-    this.centroRepo = new CentroDeportivoRepository();
+    // CentroDeportivoRepository ya exporta una instancia, no necesitamos usar 'new'
+    this.centroRepo = CentroDeportivoRepository;
   }
 
   async crearPago(data) {

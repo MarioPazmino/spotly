@@ -1,11 +1,18 @@
 // src/interfaces/http/controllers/v1/uploadImagenes/ComprobanteTransferenciaController.js
 const Boom = require('@hapi/boom');
 const { uploadComprobanteTransferencia, getPresignedUrl, deleteObject } = require('../../../../../infrastructure/services/s3Service');
-const PagosService = require('../../../../../infrastructure/services/pagosService');
+
+// Importar repositorios directamente para evitar problemas de importación en Lambda
+const pagosRepository = require('../../../../../infrastructure/repositories/pagosRepository');
+const reservaRepository = require('../../../../../infrastructure/repositories/reservaRepository');
+const centroDeportivoRepository = require('../../../../../infrastructure/repositories/centroDeportivoRepository');
 
 class ComprobanteTransferenciaController {
   constructor() {
-    this.pagosService = new PagosService();
+    // Usar repositorios directamente
+    this.pagosRepo = pagosRepository;
+    this.reservaRepo = reservaRepository;
+    this.centroRepo = centroDeportivoRepository;
   }
 
   /**
@@ -19,7 +26,7 @@ class ComprobanteTransferenciaController {
       const { pagoId } = req.params;
       
       // Verificar que existe el pago
-      const pago = await this.pagosService.obtenerPagoPorId(pagoId);
+      const pago = await this.pagosRepo.findById(pagoId);
       if (!pago) {
         throw Boom.notFound('Pago no encontrado');
       }
@@ -53,7 +60,7 @@ class ComprobanteTransferenciaController {
       const key = await uploadComprobanteTransferencia(req.file.buffer, req.file.originalname, pagoId);
 
       // Actualizar el pago con la key del comprobante
-      const updatedPago = await this.pagosService.actualizarPago(pagoId, {
+      const updatedPago = await this.pagosRepo.update(pagoId, {
         detallesPago: {
           ...pago.detallesPago,
           comprobanteKey: key
@@ -87,7 +94,7 @@ class ComprobanteTransferenciaController {
       const { pagoId } = req.params;
       
       // Verificar que existe el pago
-      const pago = await this.pagosService.obtenerPagoPorId(pagoId);
+      const pago = await this.pagosRepo.findById(pagoId);
       if (!pago) {
         throw Boom.notFound('Pago no encontrado');
       }
@@ -122,7 +129,7 @@ class ComprobanteTransferenciaController {
       const { pagoId } = req.params;
       
       // Verificar que existe el pago
-      const pago = await this.pagosService.obtenerPagoPorId(pagoId);
+      const pago = await this.pagosRepo.findById(pagoId);
       if (!pago) {
         throw Boom.notFound('Pago no encontrado');
       }
@@ -159,7 +166,7 @@ class ComprobanteTransferenciaController {
       const key = await uploadComprobanteTransferencia(req.file.buffer, req.file.originalname, pagoId);
 
       // Actualizar el pago con la nueva key del comprobante
-      const updatedPago = await this.pagosService.actualizarPago(pagoId, {
+      const updatedPago = await this.pagosRepo.update(pagoId, {
         detallesPago: {
           ...pago.detallesPago,
           comprobanteKey: key
@@ -193,7 +200,7 @@ class ComprobanteTransferenciaController {
       const { pagoId } = req.params;
       
       // Verificar que existe el pago
-      const pago = await this.pagosService.obtenerPagoPorId(pagoId);
+      const pago = await this.pagosRepo.findById(pagoId);
       if (!pago) {
         throw Boom.notFound('Pago no encontrado');
       }
@@ -212,7 +219,7 @@ class ComprobanteTransferenciaController {
       await deleteObject(pago.detallesPago.comprobanteKey);
 
       // Actualizar el pago eliminando la key del comprobante
-      const updatedPago = await this.pagosService.actualizarPago(pagoId, {
+      const updatedPago = await this.pagosRepo.update(pagoId, {
         detallesPago: {
           ...pago.detallesPago,
           comprobanteKey: null

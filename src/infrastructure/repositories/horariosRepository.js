@@ -159,7 +159,7 @@ async update(horarioId, updates) {
       const batch = items.slice(i, i + 25);
       const params = {
         RequestItems: {
-          [TABLE_NAME]: batch.map(horario => ({
+          [getSchedulesTable()]: batch.map(horario => ({
             DeleteRequest: {
               Key: marshall({ horarioId: horario.horarioId })
             }

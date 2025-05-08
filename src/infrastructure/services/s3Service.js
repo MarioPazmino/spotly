@@ -2,7 +2,7 @@
 const AWS = require('aws-sdk');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const sharp = require('sharp');
+// No usamos sharp para evitar problemas de compatibilidad con Lambda
 
 // Configuración de AWS S3
 const s3 = new AWS.S3({
@@ -24,34 +24,36 @@ const MIME_TYPES = {
 /**
  * Valida el tamaño y formato de una imagen
  * @param {Buffer} buffer - Buffer del archivo
+ * @param {string} originalName - Nombre original del archivo
  * @returns {Promise<Object>} Metadata de la imagen validada
  * @throws {Error} Si la validación falla
  */
-async function validateImage(buffer) {
+async function validateImage(buffer, originalName) {
   // Validar tamaño máximo
   if (buffer.length > MAX_SIZE_BYTES) {
     throw new Error('El archivo excede el tamaño máximo permitido de 5MB.');
   }
 
-  // Validar tipo MIME real usando sharp
-  let metadata;
-  try {
-    metadata = await sharp(buffer).metadata();
-  } catch (err) {
-    throw new Error('No se pudo procesar la imagen o el archivo no es una imagen válida.');
-  }
-
+  // Validación básica por extensión
+  const ext = path.extname(originalName).toLowerCase().substring(1);
+  const format = ext === 'jpg' ? 'jpeg' : ext;
+  
   // Validar formato permitido
-  if (!ALLOWED_FORMATS.includes(metadata.format)) {
+  if (!ALLOWED_FORMATS.includes(format)) {
     throw new Error('Solo se permiten imágenes JPEG, PNG o WEBP.');
   }
-
-  // Validar el MIME type real del buffer
-  if (!isValidMime(buffer, metadata.format)) {
+  
+  // Validación básica de magic numbers para tipos comunes
+  if (!isValidMime(buffer, format)) {
     throw new Error('El archivo no corresponde a una imagen válida.');
   }
-
-  return metadata;
+  
+  // Devolver metadata simulada para compatibilidad
+  return {
+    format: format,
+    width: 800,  // valores simulados
+    height: 600
+  };
 }
 
 /**
@@ -60,7 +62,7 @@ async function validateImage(buffer) {
  * @param {string} format - Formato detectado
  * @returns {boolean} true si el MIME type es válido
  */
-  function isValidMime(buffer, format) {
+function isValidMime(buffer, format) {
     // JPEG: FF D8 FF
     if (format === 'jpeg' && buffer.slice(0, 3).toString('hex') === 'ffd8ff') return true;
     // PNG: 89 50 4E 47 0D 0A 1A 0A
@@ -78,7 +80,7 @@ async function validateImage(buffer) {
  * @returns {Promise<string>} key del objeto en S3
  */
 async function uploadImage(buffer, originalName, centroId) {
-  const metadata = await validateImage(buffer);
+  const metadata = await validateImage(buffer, originalName);
   const ext = path.extname(originalName).toLowerCase();
   const key = `centros/${centroId}/${uuidv4()}${ext}`;
 
@@ -102,7 +104,7 @@ async function uploadImage(buffer, originalName, centroId) {
  * @returns {Promise<string>} key del objeto en S3
  */
 async function uploadCanchaImage(buffer, originalName, centroId, canchaId) {
-  const metadata = await validateImage(buffer);
+  const metadata = await validateImage(buffer, originalName);
   const ext = path.extname(originalName).toLowerCase();
   const key = `canchas/${centroId}/${canchaId}/${uuidv4()}${ext}`;
 
@@ -125,7 +127,7 @@ async function uploadCanchaImage(buffer, originalName, centroId, canchaId) {
  * @returns {Promise<string>} key del objeto en S3
  */
 async function uploadComprobanteTransferencia(buffer, originalName, pagoId) {
-  const metadata = await validateImage(buffer);
+  const metadata = await validateImage(buffer, originalName);
   const ext = path.extname(originalName).toLowerCase();
   const key = `comprobantes/${pagoId}/${uuidv4()}${ext}`;
 
@@ -148,7 +150,7 @@ async function uploadComprobanteTransferencia(buffer, originalName, pagoId) {
  * @returns {Promise<string>} key del objeto en S3
  */
 async function uploadUserProfileImage(buffer, originalName, userId) {
-  const metadata = await validateImage(buffer);
+  const metadata = await validateImage(buffer, originalName);
   const ext = path.extname(originalName).toLowerCase();
   const key = `usuarios/${userId}/${uuidv4()}${ext}`;
 

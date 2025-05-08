@@ -3,6 +3,9 @@ const Joi = require('joi');
 const Boom = require('@hapi/boom');
 const UserService = require('../../../../infrastructure/services/userService');
 
+// Instanciar el servicio de usuario
+const userService = new UserService();
+
 // Validaciones
 const registerSchema = Joi.object({
   email: Joi.string().email().required(),
@@ -29,7 +32,7 @@ exports.createUser = async (req, res, next) => {
 
     const clientId = req.headers['x-client-id'] || process.env.COGNITO_MOBILE_CLIENT_ID;
 
-    const user = await UserService.registerUser(value, clientId);
+    const user = await userService.registerUser(value, clientId);
     return res.status(201).json(user);
   } catch (error) {
     next(error);
@@ -39,7 +42,7 @@ exports.createUser = async (req, res, next) => {
 exports.getUserById = async (req, res, next) => {
   try {
     const { userId } = req.params;
-    const user = await UserService.getUserById(userId);
+    const user = await userService.getUserById(userId);
     if (!user) throw Boom.notFound('Usuario no encontrado');
     return res.status(200).json(user);
   } catch (error) {
@@ -55,7 +58,7 @@ exports.updateUserProfile = async (req, res, next) => {
     if (error) throw Boom.badRequest(error.message);
 
     const requesterId = req.user.sub; // Suponiendo que el middleware de autenticación inyecta esto
-    const updated = await UserService.updateUserProfile(userId, value, requesterId);
+    const updated = await userService.updateUserProfile(userId, value, requesterId);
     return res.status(200).json(updated);
   } catch (error) {
     next(error);
@@ -66,7 +69,7 @@ exports.deleteUser = async (req, res, next) => {
   try {
     const { userId } = req.params;
     const requesterId = req.user.sub;
-    await UserService.deleteUser(userId, requesterId);
+    await userService.deleteUser(userId, requesterId);
     return res.status(200).json({ message: 'Usuario eliminado' });
   } catch (error) {
     next(error);
@@ -77,7 +80,7 @@ exports.listPendingAdmins = async (req, res, next) => {
   try {
     const limit = parseInt(req.query.limit) || 20;
     const lastEvaluatedKey = req.query.nextToken || null;
-    const result = await UserService.getPendingAdmins(limit, lastEvaluatedKey);
+    const result = await userService.getPendingAdmins(limit, lastEvaluatedKey);
     return res.status(200).json(result);
   } catch (error) {
     next(error);
@@ -88,7 +91,7 @@ exports.approveAdminCenter = async (req, res, next) => {
   try {
     const { userId } = req.params;
     const requesterId = req.user.sub;
-    const result = await UserService.approveAdminCenter(userId, requesterId);
+    const result = await userService.approveAdminCenter(userId, requesterId);
     return res.status(200).json(result);
   } catch (error) {
     next(error);

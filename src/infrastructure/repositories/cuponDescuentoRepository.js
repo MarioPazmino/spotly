@@ -1,5 +1,6 @@
 // src/infrastructure/repositories/cuponDescuentoRepository.js
-const dynamoDB = require('../config/dynamodb');
+const AWS = require('aws-sdk');
+const dynamoDB = new AWS.DynamoDB.DocumentClient();
 const CuponDescuento = require('../../domain/entities/cupon-descuento');
 
 class CuponDescuentoRepository {

@@ -30,13 +30,16 @@ validateEnvVars();
 
 const app = express();
 
-// Crear una única instancia del repositorio
+// Importar repositorios (algunos son clases, otros son instancias u objetos)
 const userRepository = new UserRepository();
-const centroDeportivoRepository = new CentroDeportivoRepository();
+// Importar directamente la instancia de CentroDeportivoRepository
+const centroDeportivoRepository = require('./src/infrastructure/repositories/centroDeportivoRepository');
 const canchasRepository = new CanchasRepository();
-const horariosRepository = new HorariosRepository();
+// Importar el objeto de horariosRepository (no es una clase)
+const horariosRepository = require('./src/infrastructure/repositories/horariosRepository');
 const cuponDescuentoRepository = new CuponDescuentoRepository();
-const reservaRepository = new ReservaRepository();
+// Importar directamente la instancia de ReservaRepository
+const reservaRepository = require('./src/infrastructure/repositories/reservaRepository');
 const pagosRepository = new PagosRepository();
 const resenaRepository = new ResenaRepository();
 // Configuración de middlewares
@@ -54,10 +57,12 @@ app.use(cors({
 app.use(express.json()); // Parsear JSON en las solicitudes
 
 // Rutas principales
+// Verificar si la URL ya tiene el prefijo /api para evitar duplicación
 app.use('/api', routes);
 
 // Ruta de salud (health check)
 app.get('/health', (req, res) => {
+  console.log('Health check solicitado');
   res.status(200).json({ 
     status: 'UP', 
     message: 'API está funcionando correctamente' 

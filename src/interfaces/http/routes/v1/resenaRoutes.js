@@ -2,7 +2,7 @@
 const express = require('express');
 const ResenaController = require('../../controllers/v1/resenaController');
 const validarResena = require('../../../middlewares/validarResena');
-const { autenticar } = require('../../../middlewares/authorization');
+const authorization = require('../../../middlewares/authorization');
 const { validate: isUuid } = require('uuid');
 
 const router = express.Router();
@@ -29,7 +29,7 @@ router.get('/estadisticas/cancha/:canchaId', resenaController.obtenerEstadistica
 router.get('/estadisticas/centro/:centroId', resenaController.obtenerEstadisticasCentro.bind(resenaController));
 
 // Rutas protegidas
-router.use(autenticar);
+router.use((req, res, next) => authorization.autenticar(req, res, next));
 router.post('/', validarResena, resenaController.crearResena.bind(resenaController));
 router.put('/:resenaId', validarResena, resenaController.actualizarResena.bind(resenaController));
 router.get('/:resenaId', resenaController.obtenerResena.bind(resenaController));
