@@ -14,6 +14,7 @@ const BUCKET = process.env.IMAGENES_CENTROS_BUCKET || `spotly-centros-imagenes-d
 // Constantes de validación
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 const ALLOWED_FORMATS = ['jpeg', 'png', 'webp'];
+const JPEG_ALIASES = ['jpg', 'jpeg', 'jfif', 'jpe', 'jif', 'jfi']; // Todos los alias comunes para JPEG
 const MIME_TYPES = {
   jpeg: 'image/jpeg',
   jpg: 'image/jpeg',
@@ -31,21 +32,27 @@ const MIME_TYPES = {
 async function validateImage(buffer, originalName) {
   // Validar tamaño máximo
   if (buffer.length > MAX_SIZE_BYTES) {
-    throw new Error('El archivo excede el tamaño máximo permitido de 5MB.');
+    const sizeMB = (buffer.length / (1024 * 1024)).toFixed(2);
+    throw new Error(`La imagen es demasiado grande (${sizeMB}MB). El tamaño máximo permitido es de 5MB. Por favor, comprime la imagen e intenta nuevamente.`);
   }
 
   // Validación básica por extensión
   const ext = path.extname(originalName).toLowerCase().substring(1);
-  const format = ext === 'jpg' ? 'jpeg' : ext;
+  let format = ext;
+  
+  // Convertir todos los formatos JPEG a 'jpeg' para estandarizar
+  if (JPEG_ALIASES.includes(ext)) {
+    format = 'jpeg';
+  }
   
   // Validar formato permitido
   if (!ALLOWED_FORMATS.includes(format)) {
-    throw new Error('Solo se permiten imágenes JPEG, PNG o WEBP.');
+    throw new Error(`Formato de imagen no válido: ${ext}. Solo se permiten imágenes en formato JPEG (.jpg, .jpeg), PNG (.png) o WEBP (.webp). Por favor, convierte tu imagen a uno de estos formatos e intenta nuevamente.`);
   }
   
   // Validación básica de magic numbers para tipos comunes
   if (!isValidMime(buffer, format)) {
-    throw new Error('El archivo no corresponde a una imagen válida.');
+    throw new Error(`El archivo no corresponde a una imagen válida de formato ${format.toUpperCase()}. El archivo podría estar corrupto o tener una extensión incorrecta. Por favor, verifica que la imagen sea válida e intenta nuevamente.`);
   }
   
   // Devolver metadata simulada para compatibilidad
@@ -143,6 +150,64 @@ async function uploadComprobanteTransferencia(buffer, originalName, pagoId) {
 }
 
 /**
+ * Elimina un objeto de S3 usando su key
+ * @param {string} key - Key del objeto a eliminar
+ * @returns {Promise<boolean>} true si se eliminó correctamente, false si hubo un error
+ */
+async function deleteS3Object(key) {
+  if (!key) return false;
+  
+  try {
+    const params = {
+      Bucket: BUCKET,
+      Key: key
+    };
+    
+    await s3.deleteObject(params).promise();
+    console.log(`Objeto eliminado correctamente: ${key}`);
+    return true;
+  } catch (error) {
+    console.error(`Error al eliminar objeto ${key}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Extrae la key de S3 de una URL presignada
+ * @param {string} url - URL presignada de S3
+ * @returns {string|null} Key del objeto o null si no se pudo extraer
+ */
+function extractKeyFromUrl(url) {
+  if (!url) return null;
+  
+  try {
+    const parsedUrl = new URL(url);
+    
+    // Verificar si es una URL de S3 o CloudFront
+    if (!parsedUrl.hostname.includes('amazonaws.com') && 
+        !parsedUrl.hostname.includes('cloudfront.net') && 
+        !parsedUrl.hostname.includes('spotly')) {
+      return null;
+    }
+    
+    // Extraer la key del path
+    // El formato típico es: https://bucket.s3.region.amazonaws.com/key
+    // o https://bucket.s3.region.amazonaws.com/key?params para URLs firmadas
+    let key = parsedUrl.pathname.slice(1); // Remover el slash inicial
+    
+    // Si es una URL firmada, puede tener parámetros que debemos ignorar
+    if (key.includes('?')) {
+      key = key.split('?')[0];
+    }
+    
+    return key;
+  } catch (error) {
+    console.error(`Error al extraer key de URL ${url}:`, error);
+    return null;
+  }
+}
+
+/**
  * Sube una imagen de perfil de usuario a S3
  * @param {Buffer} buffer - Buffer del archivo
  * @param {string} originalName - Nombre original del archivo
@@ -207,5 +272,6 @@ module.exports = {
   uploadComprobanteTransferencia,
   uploadUserProfileImage,
   getPresignedUrl,
-  deleteObject
+  deleteS3Object,
+  extractKeyFromUrl
 };

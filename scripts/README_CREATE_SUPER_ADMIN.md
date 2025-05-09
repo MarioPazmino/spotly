@@ -29,7 +29,7 @@ set SUPER_ADMIN_GROUP_NAME=super_admin
 2. Ejecuta el script proporcionando el email, contraseña temporal y nombre (opcional) del super_admin:
 
 ```bash
-node scripts/createSuperAdmin.js mariopazmino78@gmail.com Temporal123! "Mario Raul Pazmiño"
+node scripts/createSuperAdmin.js mariopazmino7@gmail.com Temporal123! "Mario Raul Pazmiñ"
 ```
 
 3. El script realizará las siguientes acciones:

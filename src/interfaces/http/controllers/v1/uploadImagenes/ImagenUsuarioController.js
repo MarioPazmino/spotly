@@ -1,8 +1,12 @@
-// src/interfaces/http/controllers/v1/ImagenUsuarioController.js
+// src/interfaces/http/controllers/v1/uploadImagenes/ImagenUsuarioController.js
 const Boom = require('@hapi/boom');
-const UserService = require('../../../../../infrastructure/services/userService');
-const { uploadUserProfileImage, getPresignedUrl } = require('../../../../../infrastructure/services/s3Service');
+const UserProfileService = require('../../../../../infrastructure/services/user/userProfileService');
+const UserRepository = require('../../../../../infrastructure/repositories/userRepository');
 const { sanitizeImageUrl } = require('../../../../../utils/sanitizeInput');
+
+// Instanciar los servicios
+const userRepository = new UserRepository();
+const userProfileService = new UserProfileService(userRepository);
 
 /**
  * Subir o actualizar imagen de perfil de usuario (solo 1 imagen)
@@ -11,32 +15,62 @@ const { sanitizeImageUrl } = require('../../../../../utils/sanitizeInput');
 exports.uploadImagen = async (req, res, next) => {
   try {
     const { userId } = req.params;
-    let url = null;
+    const requesterId = req.user.sub;
 
-    // 1. Procesar archivo subido
+    // Procesar archivo subido
     if (req.file) {
-      // Subir imagen como privada y obtener key
-      const key = await uploadUserProfileImage(req.file.buffer, req.file.originalname, userId);
-      // Generar presigned URL para mostrar la imagen
-      url = getPresignedUrl(key); // Usar expiración configurable
+      try {
+        // Procesar la imagen y actualizar el perfil del usuario
+        const updatedUser = await userProfileService.updateProfileImage(
+          userId, 
+          req.file.buffer, 
+          req.file.originalname, 
+          requesterId
+        );
+        
+        // Sanitizar URL para seguridad
+        const sanitizedUrl = sanitizeImageUrl(updatedUser.imagenPerfil);
+        
+        // Devolver respuesta exitosa
+        return res.status(200).json({
+          imagenPerfil: sanitizedUrl,
+          message: 'Imagen de perfil actualizada correctamente'
+        });
+      } catch (uploadError) {
+        console.log(`Error al procesar la imagen para usuario ${userId}:`, uploadError.message);
+        return res.status(400).json({
+          error: 'Error al procesar la imagen',
+          message: uploadError.message,
+          details: 'Asegúrate de que la imagen sea válida (JPEG, PNG o WEBP) y no exceda los 5MB.'
+        });
+      }
+    } else {
+      // No se proporcionó ningún archivo
+      return res.status(400).json({
+        error: 'No se proporcionó ninguna imagen',
+        message: 'Se requiere una imagen para actualizar el perfil',
+        details: 'Debes proporcionar un archivo de imagen válido'
+      });
     }
-
-    // Eliminada la opción de procesar URL externa por seguridad
-
-    if (!url) {
-      throw Boom.badRequest('Debes subir una imagen válida.');
-    }
-
-    // Sanitizar la URL antes de guardarla
-    const sanitizedUrl = sanitizeImageUrl(url);
-    if (!sanitizedUrl) {
-      throw Boom.badRequest('La URL de la imagen no es válida.');
-    }
-
-    // 3. Actualizar usuario con la URL sanitizada
-    const updated = await UserService.updateUserProfile(userId, { picture: sanitizedUrl }, userId);
-    return res.status(200).json({ picture: sanitizedUrl });
   } catch (error) {
-    next(error);
+    // Manejo de errores específicos
+    if (error.isBoom) {
+      const statusCode = error.output.statusCode;
+      const errorMessage = error.output.payload.message;
+      
+      return res.status(statusCode).json({
+        error: error.output.payload.error,
+        message: errorMessage,
+        details: error.data || 'Error al procesar la solicitud'
+      });
+    }
+    
+    // Error genérico
+    console.error(`Error al subir imagen para usuario ${req.params.userId}:`, error);
+    return res.status(500).json({
+      error: 'Error interno del servidor',
+      message: 'Ocurrió un error al procesar la imagen',
+      details: 'Por favor, intenta nuevamente más tarde'
+    });
   }
 };

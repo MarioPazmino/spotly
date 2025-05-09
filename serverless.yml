@@ -4,7 +4,7 @@ service: alquiler-canchas-api
 
 package:
   include:
-    - node_modules/multer/**
+    - node_modules/**
 
 # Variables comunes para reutilización
 custom:

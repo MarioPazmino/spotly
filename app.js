@@ -2,14 +2,6 @@
 const express = require('express');
 const serverless = require('serverless-http');
 const cors = require('cors');
-const UserRepository = require('./src/infrastructure/repositories/userRepository');
-const CentroDeportivoRepository = require('./src/infrastructure/repositories/centroDeportivoRepository');
-const CanchasRepository = require('./src/infrastructure/repositories/canchasRepository');
-const HorariosRepository = require('./src/infrastructure/repositories/horariosRepository');
-const ReservaRepository = require('./src/infrastructure/repositories/reservaRepository');
-const CuponDescuentoRepository = require('./src/infrastructure/repositories/cuponDescuentoRepository');
-const PagosRepository = require('./src/infrastructure/repositories/pagosRepository');
-const ResenaRepository = require('./src/infrastructure/repositories/resenaRepository');
 const errorHandler = require('./src/interfaces/middlewares/errorHandler');
 const routes = require('./src/interfaces/http/routes');
 
@@ -30,16 +22,20 @@ validateEnvVars();
 
 const app = express();
 
-// Importar repositorios (algunos son clases, otros son instancias u objetos)
-const userRepository = new UserRepository();
-// Importar directamente la instancia de CentroDeportivoRepository
+// Importar repositorios
+const UserRepository = require('./src/infrastructure/repositories/userRepository');
 const centroDeportivoRepository = require('./src/infrastructure/repositories/centroDeportivoRepository');
-const canchasRepository = new CanchasRepository();
-// Importar el objeto de horariosRepository (no es una clase)
+const CanchasRepository = require('./src/infrastructure/repositories/canchasRepository');
 const horariosRepository = require('./src/infrastructure/repositories/horariosRepository');
-const cuponDescuentoRepository = new CuponDescuentoRepository();
-// Importar directamente la instancia de ReservaRepository
+const CuponDescuentoRepository = require('./src/infrastructure/repositories/cuponDescuentoRepository');
 const reservaRepository = require('./src/infrastructure/repositories/reservaRepository');
+const PagosRepository = require('./src/infrastructure/repositories/pagosRepository');
+const ResenaRepository = require('./src/infrastructure/repositories/resenaRepository');
+
+// Instanciar los repositorios que son clases
+const userRepository = new UserRepository();
+const canchasRepository = new CanchasRepository();
+const cuponDescuentoRepository = new CuponDescuentoRepository();
 const pagosRepository = new PagosRepository();
 const resenaRepository = new ResenaRepository();
 // Configuración de middlewares

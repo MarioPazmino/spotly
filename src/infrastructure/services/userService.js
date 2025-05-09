@@ -238,7 +238,7 @@ class UserService {
     }
 
     // Validar rol permitido
-    if (!['cliente', 'admin_centro'].includes(userData.role)) {
+    if (!['cliente', 'admin_centro', 'super_admin'].includes(userData.role)) {
       throw Boom.badRequest('Rol no permitido');
     }
   }

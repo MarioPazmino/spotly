@@ -157,7 +157,7 @@ const sanitizeCancha = (cancha) => {
 };
 
 /**
- * Sanitiza una URL de imagen asegurando que sea una URL válida del bucket S3
+ * Sanitiza una URL de imagen asegurando que sea una URL válida
  * @param {string} url - URL de la imagen a sanitizar
  * @returns {string} URL sanitizada o cadena vacía si no es válida
  */
@@ -168,29 +168,46 @@ const sanitizeImageUrl = (url) => {
     // Validar que sea una URL válida
     const parsedUrl = new URL(url);
     
-    // Verificar que sea una URL de S3 del bucket correcto
-    const bucketName = process.env.IMAGENES_CENTROS_BUCKET || 'spotly-centros-imagenes-dev';
-    if (!parsedUrl.hostname.includes(bucketName)) {
-      return '';
-    }
+    // Verificar que sea una URL de Amazon S3 o CloudFront
+    const isS3Url = parsedUrl.hostname.includes('amazonaws.com') || 
+                    parsedUrl.hostname.includes('cloudfront.net') || 
+                    parsedUrl.hostname.includes('spotly');
     
-    // Verificar que la ruta comience con uno de los prefijos permitidos
-    const path = parsedUrl.pathname.slice(1); // Remover el slash inicial
-    const validPrefixes = ['centros/', 'canchas/', 'comprobantes/', 'usuarios/'];
-    if (!validPrefixes.some(prefix => path.startsWith(prefix))) {
+    if (!isS3Url) {
+      console.log(`URL rechazada: ${url} - No es una URL de S3 válida`);
       return '';
     }
     
     // Verificar que la extensión sea de imagen común permitida
-    const extension = path.split('.').pop().toLowerCase();
-    const validExtensions = ['jpg', 'jpeg', 'png', 'webp'];
+    // Extraer la extensión del path o del query param X-Amz-SignedHeaders si existe
+    let extension = '';
     
-    if (!validExtensions.includes(extension)) {
+    // Intentar obtener la extensión del path
+    const pathParts = parsedUrl.pathname.split('.');
+    if (pathParts.length > 1) {
+      extension = pathParts.pop().toLowerCase();
+    }
+    
+    // Si no hay extensión en el path, verificar si es una URL firmada de S3
+    // Las URLs firmadas pueden no tener extensión visible en el path
+    if (!extension && parsedUrl.searchParams.has('X-Amz-SignedHeaders')) {
+      // Para URLs firmadas de S3, aceptamos sin verificar extensión
+      return url;
+    }
+    
+    // Lista ampliada de extensiones válidas
+    const validExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'jfif', 'jpe', 'jif', 'jfi'];
+    
+    // Si tenemos una extensión, verificar que sea válida
+    if (extension && !validExtensions.includes(extension)) {
+      console.log(`URL rechazada: ${url} - Extensión no válida: ${extension}`);
       return '';
     }
     
+    // Si llegamos aquí, la URL es válida
     return url;
   } catch (error) {
+    console.log(`Error al validar URL: ${url} - ${error.message}`);
     return '';
   }
 };

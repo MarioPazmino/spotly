@@ -166,7 +166,8 @@ async function registerUserInDynamoDB(userId, email, name) {
       role: 'super_admin',
       pendienteAprobacion: 'false',
       registrationSource: 'console',
-      picture: '',
+      imagenPerfil: '',
+      canchasFavoritas: [], // Array vacío para canchas favoritas
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
