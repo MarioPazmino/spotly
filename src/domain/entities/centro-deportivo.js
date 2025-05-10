@@ -1,5 +1,55 @@
 // src/domain/entities/centro-deportivo.js
 class CentroDeportivo {
+  /**
+   * Calcula la hora de apertura mínima entre todos los días de la semana
+   * @param {Array} horario - Array de objetos con horarios por día
+   * @returns {string} - Hora de apertura mínima en formato HH:MM
+   * @private
+   */
+  _calcularHoraAperturaMinima(horario) {
+    if (!Array.isArray(horario) || horario.length === 0) {
+      return '08:00'; // Valor por defecto
+    }
+
+    // Encontrar la hora de apertura mínima
+    let horaMinima = '23:59';
+    
+    for (const dia of horario) {
+      if (dia.abre && typeof dia.abre === 'string' && dia.abre.length === 5) {
+        if (dia.abre < horaMinima) {
+          horaMinima = dia.abre;
+        }
+      }
+    }
+    
+    return horaMinima === '23:59' ? '08:00' : horaMinima;
+  }
+
+  /**
+   * Calcula la hora de cierre máxima entre todos los días de la semana
+   * @param {Array} horario - Array de objetos con horarios por día
+   * @returns {string} - Hora de cierre máxima en formato HH:MM
+   * @private
+   */
+  _calcularHoraCierreMaxima(horario) {
+    if (!Array.isArray(horario) || horario.length === 0) {
+      return '22:00'; // Valor por defecto
+    }
+
+    // Encontrar la hora de cierre máxima
+    let horaMaxima = '00:00';
+    
+    for (const dia of horario) {
+      if (dia.cierra && typeof dia.cierra === 'string' && dia.cierra.length === 5) {
+        if (dia.cierra > horaMaxima) {
+          horaMaxima = dia.cierra;
+        }
+      }
+    }
+    
+    return horaMaxima === '00:00' ? '22:00' : horaMaxima;
+  }
+
   constructor({
     centroId, // Identificador único del centro deportivo
     nombre, // Nombre comercial del centro
@@ -20,8 +70,6 @@ class CentroDeportivo {
     braintreeStatus, // Estado de la cuenta: 'activa', 'pendiente', 'rechazada'
     // Redes sociales
     redesSociales, // Objeto con enlaces a redes sociales (opcional)
-    horaAperturaMinima, // Hora de apertura mínima (formato HH:MM)
-    horaCierreMaxima, // Hora de cierre máxima (formato HH:MM)
     createdAt, // Fecha de creación del registro
     updatedAt // Fecha de última actualización
   }) {
@@ -30,16 +78,25 @@ class CentroDeportivo {
     this.direccion = direccion;
     this.telefonoPrincipal = telefonoPrincipal;
     this.telefonoSecundario = telefonoSecundario || null; // Opcional, null por defecto
-    // --- NUEVOS CAMPOS AUXILIARES PARA FILTRO DE HORARIO ---
-    // Forzar formato HH:mm (sin segundos)
-    this.horaAperturaMinima = (typeof horaAperturaMinima === 'string' && horaAperturaMinima.length === 5) ? horaAperturaMinima : null;
-    this.horaCierreMaxima = (typeof horaCierreMaxima === 'string' && horaCierreMaxima.length === 5) ? horaCierreMaxima : null;
-    this.userId = userId;
     // --- HORARIO FLEXIBLE POR DÍA ---
-    this.horario = horario || [];
+    this.horario = horario || [
+      { dia: 'lunes', abre: '08:00', cierra: '22:00' },
+      { dia: 'martes', abre: '08:00', cierra: '22:00' },
+      { dia: 'miercoles', abre: '08:00', cierra: '22:00' },
+      { dia: 'jueves', abre: '08:00', cierra: '22:00' },
+      { dia: 'viernes', abre: '08:00', cierra: '22:00' },
+      { dia: 'sabado', abre: '08:00', cierra: '22:00' },
+      { dia: 'domingo', abre: '08:00', cierra: '22:00' }
+    ];
+    this.userId = userId;
     this.ubicacionGPS = ubicacionGPS || { lat: 0, lng: 0 }; // Coordenadas por defecto
     this.imagenes = imagenes || []; // Array vacío por defecto
     this.estado = estado || 'abierto'; // Por defecto está abierto
+    
+    // Calcular automáticamente horaAperturaMinima y horaCierreMaxima a partir del array horario
+    // Estos campos son necesarios para los índices de DynamoDB
+    this.horaAperturaMinima = this._calcularHoraAperturaMinima(this.horario);
+    this.horaCierreMaxima = this._calcularHoraCierreMaxima(this.horario);
     // Cuentas bancarias
     this.bancos = bancos || []; // Array vacío por defecto
     this.cedulaJuridica = cedulaJuridica || null; // RUC del centro

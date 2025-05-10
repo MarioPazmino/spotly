@@ -3,8 +3,9 @@ app: alquiler-canchas-api
 service: alquiler-canchas-api
 
 package:
-  include:
-    - node_modules/**
+  patterns:
+    - '!node_modules/.bin/**'
+    - 'node_modules/**'
 
 # Variables comunes para reutilización
 custom:
@@ -614,6 +615,18 @@ resources:
             - OPTIONS
           AllowOrigins:
             - '*'
+
+    # Configuración para manejar formularios multipart/form-data
+    ApiGatewayBinaryMediaTypes:
+      Type: "AWS::ApiGateway::RestApi"
+      Properties:
+        Name: alquiler-canchas-binary-${self:custom.stage}
+        BinaryMediaTypes:
+          - 'multipart/form-data'
+          - 'image/jpeg'
+          - 'image/png'
+          - 'image/webp'
+
     # Autorizador de Cognito para API Gateway
     CognitoAuthorizer:
       Type: AWS::ApiGatewayV2::Authorizer

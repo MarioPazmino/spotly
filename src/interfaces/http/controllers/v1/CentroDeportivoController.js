@@ -40,9 +40,29 @@ exports.updateCentro = async (req, res, next) => {
 exports.deleteCentro = async (req, res, next) => {
   try {
     const { centroId } = req.params;
-    await centroDeportivoService.deleteCentro(centroId);
-    return res.status(200).json({ message: 'Centro deportivo eliminado' });
+    const result = await centroDeportivoService.deleteCentro(centroId);
+    
+    return res.status(200).json({
+      status: 'success',
+      message: 'Centro deportivo eliminado correctamente',
+      data: {
+        centroId,
+        deleted: true
+      }
+    });
   } catch (error) {
+    // Si es un error de Boom, formatearlo para una respuesta más amigable
+    if (error.isBoom) {
+      const { statusCode, payload } = error.output;
+      return res.status(statusCode).json({
+        status: 'error',
+        code: payload.error,
+        message: payload.message || 'Error al eliminar el centro deportivo',
+        details: error.data
+      });
+    }
+    
+    // Para otros errores, pasar al middleware de manejo de errores
     next(error);
   }
 };

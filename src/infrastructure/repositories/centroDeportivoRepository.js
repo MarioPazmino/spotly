@@ -1,6 +1,14 @@
 //src/infrastructure/repositories/centroDeportivoRepository.js
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
+const { 
+  DynamoDBDocumentClient, 
+  PutCommand, 
+  GetCommand, 
+  UpdateCommand, 
+  DeleteCommand, 
+  QueryCommand, 
+  ScanCommand 
+} = require('@aws-sdk/lib-dynamodb');
 const { v4: uuidv4 } = require('uuid');
 const CentroDeportivo = require('../../domain/entities/centro-deportivo');
 
@@ -22,7 +30,7 @@ class CentroDeportivoRepository {
       }
     };
 
-    await this.docClient.put(params);
+    await this.docClient.send(new PutCommand(params));
     return params.Item;
   }
 
@@ -31,16 +39,16 @@ class CentroDeportivoRepository {
     const expressionAttributeNames = {};
     const expressionAttributeValues = {};
 
-    // Construir expresiones de actualización
-    Object.entries(updateData).forEach(([key, value]) => {
-      if (key !== 'imagenes') { // Excluir imágenes del update básico
+    // Construir expresiones de actualización para cada campo
+    Object.keys(updateData).forEach(key => {
+      if (key !== 'centroId') { // No permitir actualizar la clave primaria
         updateExpressions.push(`#${key} = :${key}`);
         expressionAttributeNames[`#${key}`] = key;
-        expressionAttributeValues[`:${key}`] = value;
+        expressionAttributeValues[`:${key}`] = updateData[key];
       }
     });
 
-    // Agregar timestamp de actualización
+    // Añadir timestamp de actualización
     updateExpressions.push('#updatedAt = :updatedAt');
     expressionAttributeNames['#updatedAt'] = 'updatedAt';
     expressionAttributeValues[':updatedAt'] = new Date().toISOString();
@@ -54,8 +62,8 @@ class CentroDeportivoRepository {
       ReturnValues: 'ALL_NEW'
     };
 
-    const result = await this.docClient.update(params);
-    return result.Attributes;
+    const result = await this.docClient.send(new UpdateCommand(params));
+    return new CentroDeportivo(result.Attributes);
   }
 
   async findById(centroId) {
@@ -63,7 +71,8 @@ class CentroDeportivoRepository {
       TableName: this.tableName,
       Key: { centroId }
     };
-    const result = await this.docClient.get(params);
+
+    const result = await this.docClient.send(new GetCommand(params));
     return result.Item ? new CentroDeportivo(result.Item) : null;
   }
 
@@ -72,7 +81,7 @@ class CentroDeportivoRepository {
       TableName: this.tableName,
       Key: { centroId }
     };
-    await this.docClient.delete(params);
+    await this.docClient.send(new DeleteCommand(params));
     return { centroId, deleted: true };
   }
 
@@ -98,40 +107,39 @@ class CentroDeportivoRepository {
     let done = false;
     const SCAN_BATCH_SIZE = limit; // Para paginación eficiente, igual al limit solicitado
 
+    // Verificar si no hay filtros (listar todos)
+    const noFilters = !filters.userId && !filters.estado && !filters.nombre && !filters.abiertoDespuesDe && !filters.abiertoAntesDe;
+    
     // Solo se permiten filtros sobre campos indexados
-    const canQueryByUserId = filters.userId && !filters.estado && !filters.nombre && !filters.abiertoDespuesDe && !filters.abiertoAntesDe;
-    const canQueryByUserIdEstado = filters.userId && filters.estado && !filters.nombre && !filters.abiertoDespuesDe && !filters.abiertoAntesDe;
-    const canQueryByEstado = filters.estado && !filters.userId && !filters.nombre && !filters.abiertoDespuesDe && !filters.abiertoAntesDe;
+    // Permitimos userId solo o userId+estado
+    const canQueryByUserId = filters.userId && !filters.nombre && !filters.abiertoDespuesDe && !filters.abiertoAntesDe;
     const canQueryByNombre = filters.nombre && !filters.userId && !filters.estado && !filters.abiertoDespuesDe && !filters.abiertoAntesDe;
     const canQueryByApertura = filters.abiertoDespuesDe && !filters.userId && !filters.estado && !filters.nombre && !filters.abiertoAntesDe;
     const canQueryByCierre = filters.abiertoAntesDe && !filters.userId && !filters.estado && !filters.nombre && !filters.abiertoDespuesDe;
 
-    if (canQueryByUserId || canQueryByUserIdEstado || canQueryByEstado || canQueryByNombre || canQueryByApertura || canQueryByCierre) {
-      // Construir parámetros para query
+    if (noFilters || canQueryByUserId || canQueryByNombre || canQueryByApertura || canQueryByCierre) {
+      // Construir parámetros para query o scan
       let params = {
         TableName: this.tableName,
         Limit: SCAN_BATCH_SIZE,
         ExclusiveStartKey: lastEvaluatedKey
       };
-      if (canQueryByUserIdEstado) {
-        params.IndexName = 'UserIdEstadoIndex';
-        params.KeyConditionExpression = 'userId = :userId AND estado = :estado';
-        params.ExpressionAttributeValues = {
-          ':userId': filters.userId,
-          ':estado': filters.estado
-        };
+      
+      // Si no hay filtros, hacemos un scan en lugar de query
+      if (noFilters) {
+        // No se necesitan parámetros adicionales para scan
       } else if (canQueryByUserId) {
-        params.IndexName = 'UserIdEstadoIndex';
+        params.IndexName = 'UserIdIndex';
         params.KeyConditionExpression = 'userId = :userId';
         params.ExpressionAttributeValues = {
           ':userId': filters.userId
         };
-      } else if (canQueryByEstado) {
-        params.IndexName = 'UserIdEstadoIndex';
-        params.KeyConditionExpression = 'estado = :estado';
-        params.ExpressionAttributeValues = {
-          ':estado': filters.estado
-        };
+        
+        // Si también hay un filtro de estado, lo aplicamos como FilterExpression
+        if (filters.estado) {
+          params.FilterExpression = 'estado = :estado';
+          params.ExpressionAttributeValues[':estado'] = filters.estado;
+        }
       } else if (canQueryByNombre) {
         params.IndexName = 'NombreIndex';
         params.KeyConditionExpression = 'nombre = :nombre';
@@ -153,7 +161,17 @@ class CentroDeportivoRepository {
       }
 
       try {
-        const result = await this.docClient.query(params).promise();
+        let result;
+        if (noFilters) {
+          // Ejecutar un scan cuando no hay filtros
+          console.log('Ejecutando scan para listar todos los centros deportivos');
+          result = await this.docClient.send(new ScanCommand(params));
+        } else {
+          // Ejecutar una query cuando hay filtros específicos
+          console.log('Ejecutando query con filtros específicos');
+          result = await this.docClient.send(new QueryCommand(params));
+        }
+        
         scannedCount += result.ScannedCount || 0;
         dynamoLastEvaluatedKey = result.LastEvaluatedKey || null;
         const items = result.Items.map(item => new CentroDeportivo(item));
@@ -161,12 +179,12 @@ class CentroDeportivoRepository {
         itemsFiltrados = itemsFiltrados.concat(itemsFiltradosBatch);
         done = true;
       } catch (error) {
-        console.error('Error en query de centros deportivos:', error);
+        console.error('Error al obtener centros deportivos:', error);
         throw error;
       }
     } else {
       // Si no hay filtros válidos, lanzar error y documentar
-      throw new Error('Solo se permiten filtros sobre campos indexados: userId, estado, userId+estado, nombre, horaAperturaMinima, horaCierreMaxima. Otros filtros no están soportados por eficiencia.');
+      throw new Error('Solo se permiten filtros sobre campos indexados: userId (con o sin estado), nombre, abiertoDespuesDe, abiertoAntesDe. Otros filtros no están soportados por eficiencia.');
     }
 
     // Ordenar resultados

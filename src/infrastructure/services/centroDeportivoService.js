@@ -7,7 +7,8 @@ const { v4: uuidv4 } = require('uuid');
 const UserRepository = require('../repositories/userRepository');
 const { sanitizeObject } = require('../../utils/sanitizeInput');
 const AWS = require('aws-sdk');
-const imagenCentroService = require('./imagenCentroService');
+const CentroImagenService = require('./centroDeportivo/centroImagenService');
+const centroImagenService = new CentroImagenService(CentroDeportivoRepository);
 
 class CentroDeportivoService {
   constructor() {
@@ -64,11 +65,15 @@ class CentroDeportivoService {
 
     // Crear centro sin imágenes inicialmente
     const { imagenes, ...datosCentro } = centroData;
-    const centro = await this.repo.save(new CentroDeportivo(datosCentro));
+    // Usar el método create en lugar de save
+    const centro = await this.repo.create(new CentroDeportivo(datosCentro));
 
     // Si hay imágenes, procesarlas
     if (imagenes && imagenes.length > 0) {
-      await imagenCentroService.agregarImagenes(centro.centroId, imagenes);
+      // Procesar cada imagen individualmente con el nuevo servicio refactorizado
+      for (const imagen of imagenes) {
+        await centroImagenService.addCentroImage(centro.centroId, imagen.buffer, imagen.originalname, centro.userId, 'admin_centro');
+      }
     }
 
     return centro;
@@ -101,7 +106,10 @@ class CentroDeportivoService {
 
     // Si hay imágenes, procesarlas
     if (imagenes && imagenes.length > 0) {
-      await imagenCentroService.agregarImagenes(centroId, imagenes);
+      // Procesar cada imagen individualmente con el nuevo servicio refactorizado
+      for (const imagen of imagenes) {
+        await centroImagenService.addCentroImage(centroId, imagen.buffer, imagen.originalname, updateData.userId || centro.userId, 'admin_centro');
+      }
     }
 
     return centroActualizado;
@@ -109,31 +117,59 @@ class CentroDeportivoService {
 
 
   async deleteCentro(centroId) {
-    // Validar formato del ID
-    this.validateCentroId(centroId);
-    // Verificar que el centro existe
-    const existingCentro = await this.repo.findById(centroId);
-    if (!existingCentro) {
-      throw Boom.notFound(`Centro deportivo con ID ${centroId} no encontrado`);
-    }
-    // Eliminar imágenes en S3 si existen
-    if (existingCentro.imagenes && Array.isArray(existingCentro.imagenes)) {
-      const s3Keys = existingCentro.imagenes.filter(img => typeof img === 'string' && img.startsWith('centros/'));
-      if (s3Keys.length > 0) {
-        const s3 = new AWS.S3({ region: process.env.AWS_REGION || 'us-east-1' });
-        const BUCKET = process.env.IMAGENES_CENTROS_BUCKET || `spotly-centros-imagenes-dev`;
-        const deleteParams = {
-          Bucket: BUCKET,
-          Delete: {
-            Objects: s3Keys.map(Key => ({ Key })),
-            Quiet: true
-          }
-        };
-        await s3.deleteObjects(deleteParams).promise();
+    try {
+      // Validar el ID
+      this.validateCentroId(centroId);
+      
+      // Obtener el centro para verificar si existe y obtener sus imágenes
+      const centro = await this.getCentroById(centroId);
+      
+      // Verificar si el centro existe
+      if (!centro) {
+        throw Boom.notFound(`No se encontró ningún centro deportivo con el ID: ${centroId}`);
+      }
+      
+      // Eliminar imágenes de S3 si existen
+      if (centro.imagenes && centro.imagenes.length > 0) {
+        // Extraer las claves de las imágenes (quitar la parte del dominio y el bucket)
+        const imageKeys = centro.imagenes.map(url => {
+          const key = url.split('/').slice(3).join('/');
+          return { Key: key };
+        });
+        
+        if (imageKeys.length > 0) {
+          const s3 = new AWS.S3();
+          const deleteParams = {
+            Bucket: process.env.IMAGES_BUCKET || 'alquiler-canchas-imagenes-dev',
+            Delete: {
+              Objects: imageKeys
+            }
+          };
+          await s3.deleteObjects(deleteParams).promise();
+        }
+      }
+      
+      // Eliminar el centro de la base de datos
+      const result = await this.repo.delete(centroId);
+      return { ...result, message: 'Centro deportivo eliminado correctamente' };
+    } catch (error) {
+      // Manejar errores específicos
+      if (error.isBoom) {
+        throw error; // Reenviar errores Boom ya formateados
+      }
+      
+      // Manejar errores de AWS o de la base de datos
+      console.error('Error al eliminar centro deportivo:', error);
+      
+      // Proporcionar mensajes de error más amigables
+      if (error.name === 'ResourceNotFoundException') {
+        throw Boom.notFound(`No se encontró ningún centro deportivo con el ID: ${centroId}`);
+      } else if (error.name === 'ConditionalCheckFailedException') {
+        throw Boom.preconditionFailed('No se puede eliminar el centro deportivo porque ha cambiado desde la última vez que se consultó');
+      } else {
+        throw Boom.badImplementation('Error al eliminar el centro deportivo. Por favor, inténtelo de nuevo más tarde.');
       }
     }
-    // Eliminar el centro de la base de datos
-    return await this.repo.delete(centroId);
   }
 
   // NUEVO MÉTODO: Buscar centros cercanos por ubicación GPS
