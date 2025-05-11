@@ -3,15 +3,15 @@ const { DynamoDBClient, PutItemCommand, GetItemCommand, QueryCommand, UpdateItem
 const { unmarshall, marshall } = require('@aws-sdk/util-dynamodb');
 const Horario = require('../../domain/entities/horarios');
 
+const client = new DynamoDBClient();
 
-const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
-
-const getSchedulesTable = () => process.env.SCHEDULES_TABLE || 'Horarios-dev';
+function getSchedulesTable() {
+  return process.env.SCHEDULES_TABLE || 'Horarios';
+}
 
 function normalizarHoraRepo(hora) {
-  if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(hora)) return hora;
-  if (/^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/.test(hora)) return hora.slice(0, 5);
-  throw new Error('El formato de hora debe ser HH:mm');
+  // Asegurar formato HH:mm
+  return hora.includes(':') ? hora : `${hora}:00`;
 }
 
 module.exports = {
@@ -19,14 +19,38 @@ module.exports = {
    * Crea un nuevo horario
    */
   async create(horarioData) {
+    // Generar un UUID para horarioId si no se proporciona
+    if (!horarioData.horarioId) {
+      const { v4: uuidv4 } = require('uuid');
+      horarioData.horarioId = uuidv4();
+    }
+    
     // Normalizar horas a HH:mm
     if (horarioData.horaInicio) horarioData.horaInicio = normalizarHoraRepo(horarioData.horaInicio);
     if (horarioData.horaFin) horarioData.horaFin = normalizarHoraRepo(horarioData.horaFin);
-    const horario = new Horario(horarioData); // Valida datos
+    
+    // Por defecto, un horario nuevo siempre está disponible
+    horarioData.estado = 'Disponible';
+    
+    // Creamos una copia limpia de los datos para el horario
+    const horarioDataLimpio = {
+      horarioId: horarioData.horarioId,
+      canchaId: horarioData.canchaId,
+      fecha: horarioData.fecha,
+      horaInicio: horarioData.horaInicio,
+      horaFin: horarioData.horaFin,
+      estado: horarioData.estado,
+      createdAt: horarioData.createdAt || new Date().toISOString(),
+      updatedAt: horarioData.updatedAt || new Date().toISOString()
+    };
+    
+    const horario = new Horario(horarioDataLimpio); // Valida datos
+    
     const params = {
       TableName: getSchedulesTable(),
-      Item: marshall(horario)
+      Item: marshall(horario, { convertClassInstanceToMap: true })
     };
+    
     await client.send(new PutItemCommand(params));
     return horario;
   },
@@ -69,11 +93,14 @@ module.exports = {
     };
   },
 
+  /**
+   * Lista horarios por cancha y fecha (usando GSI CanchaFechaIndex)
+   */
   async listByCanchaAndFecha(canchaId, fecha, limit = 20, exclusiveStartKey = null, estado = null) {
     const params = {
       TableName: getSchedulesTable(),
       IndexName: 'CanchaFechaIndex',
-      KeyConditionExpression: 'canchaId = :canchaId and fecha = :fecha',
+      KeyConditionExpression: 'canchaId = :canchaId AND fecha = :fecha',
       ExpressionAttributeValues: {
         ':canchaId': { S: canchaId },
         ':fecha': { S: fecha }
@@ -91,106 +118,108 @@ module.exports = {
   },
 
   /**
-   * Lista horarios por reservaId (usando GSI ReservaIdIndex)
-   */
-  async listByReservaId(reservaId, limit = 20, exclusiveStartKey = null, estado = null) {
-    const params = {
-      TableName: getSchedulesTable(),
-      IndexName: 'ReservaIdIndex',
-      KeyConditionExpression: 'reservaId = :reservaId',
-      ExpressionAttributeValues: {
-        ':reservaId': { S: reservaId }
-      },
-      Limit: limit
-    };
-    if (exclusiveStartKey) {
-      params.ExclusiveStartKey = exclusiveStartKey;
-    }
-    const result = await client.send(new QueryCommand(params));
-    return {
-      items: (result.Items || []).map(item => new Horario(unmarshall(item))),
-      lastEvaluatedKey: result.LastEvaluatedKey || null
-    };
-  },
-
-  /**
    * Actualiza un horario existente
    */
-async update(horarioId, updates) {
-  // Permite actualizar solo los campos válidos
-  const allowed = ['canchaId', 'fecha', 'horaInicio', 'horaFin', 'estado', 'reservaId'];
-  const updateExpr = [];
-  const exprAttrNames = {};
-  const exprAttrValues = {};
-  for (const key of allowed) {
-    if (updates[key] !== undefined) {
-      // Normalizar horas a HH:mm
-      if ((key === 'horaInicio' || key === 'horaFin') && updates[key]) {
-        updates[key] = normalizarHoraRepo(updates[key]);
-      }
-      updateExpr.push(`#${key} = :${key}`);
-      exprAttrNames[`#${key}`] = key;
-      exprAttrValues[`:${key}`] = updates[key];
+  async update(horarioId, updates) {
+    // Primero obtenemos el horario actual para verificar su estado
+    const horarioActual = await this.getById(horarioId);
+    if (!horarioActual) {
+      throw new Error(`Horario con ID ${horarioId} no encontrado`);
     }
-  }
-  if (updateExpr.length === 0) throw new Error('Nada para actualizar');
-  const params = {
-    TableName: getSchedulesTable(),
-    Key: marshall({ horarioId }),
-    UpdateExpression: 'SET ' + updateExpr.join(', '),
-    ExpressionAttributeNames: exprAttrNames,
-    ExpressionAttributeValues: exprAttrValues,
-    ReturnValues: 'ALL_NEW'
-  };
-  const result = await client.send(new UpdateItemCommand(params));
-  return new Horario(unmarshall(result.Attributes));
-},
+
+    // Permite actualizar solo los campos válidos
+    // No permitimos actualizar canchaId para evitar que un horario se mueva a otra cancha
+    const allowed = ['fecha', 'horaInicio', 'horaFin', 'estado'];
+    
+    // Crear un objeto con solo los campos permitidos
+    const datosActualizados = {};
+    
+    // Añadir updatedAt automáticamente
+    datosActualizados.updatedAt = new Date().toISOString();
+    
+    // Copiar solo los campos permitidos
+    for (const key of allowed) {
+      if (updates[key] !== undefined) {
+        // Normalizar horas a HH:mm
+        if ((key === 'horaInicio' || key === 'horaFin') && updates[key]) {
+          datosActualizados[key] = normalizarHoraRepo(updates[key]);
+        } else {
+          datosActualizados[key] = updates[key];
+        }
+      }
+    }
+    
+    // Imprimir los datos para depuración
+    console.log('Datos a actualizar:', JSON.stringify(datosActualizados));
+    console.log('Updates recibidos:', JSON.stringify(updates));
+    
+    // Ya no validamos si solo hay updatedAt, permitimos cualquier actualización
+    
+    // Combinar los datos actuales con los actualizados
+    const horarioActualizado = {
+      ...horarioActual,
+      ...datosActualizados
+    };
+    
+    // Usar el método create del mismo módulo para actualizar el horario
+    // Esto sobrescribe el horario completo con los nuevos datos
+    return await module.exports.create(horarioActualizado);
+  },
 
   /**
    * Elimina todos los horarios de una cancha en un rango de fechas
    */
   async deleteByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin) {
-    // 1. Obtener todos los horarios en el rango
-    const { items } = await this.listByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin, 1000);
+    // Primero obtenemos todos los horarios a eliminar
+    const horarios = await this.listByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin, 100);
+    
+    // Eliminamos cada horario individualmente
     const eliminados = [];
-    if (!items.length) return eliminados;
-    // 2. Eliminar en lotes de hasta 25 (BatchWriteCommand)
-    for (let i = 0; i < items.length; i += 25) {
-      const batch = items.slice(i, i + 25);
-      const params = {
-        RequestItems: {
-          [getSchedulesTable()]: batch.map(horario => ({
-            DeleteRequest: {
-              Key: marshall({ horarioId: horario.horarioId })
-            }
-          }))
-        }
-      };
-      await client.send(new BatchWriteCommand(params));
-      eliminados.push(...batch.map(h => h.horarioId));
+    for (const horario of horarios.items) {
+      try {
+        await this.delete(horario.horarioId);
+        eliminados.push(horario.horarioId);
+      } catch (error) {
+        console.error(`Error al eliminar horario ${horario.horarioId}:`, error);
+      }
     }
-    return eliminados;
+    
+    return {
+      eliminados,
+      total: eliminados.length
+    };
   },
 
+  /**
+   * Actualiza varios horarios en una sola operación
+   */
   async bulkUpdate(updatesArray) {
     if (!Array.isArray(updatesArray) || updatesArray.length === 0) {
-      throw new Error('Debe enviar un array de actualizaciones');
+      throw new Error('Se requiere un array de actualizaciones');
     }
-    const actualizados = [];
-    for (const upd of updatesArray) {
-      if (!upd.horarioId) throw new Error('Falta horarioId en una actualización');
-      const actualizado = await this.update(upd.horarioId, upd);
-      actualizados.push(actualizado);
+    
+    const resultados = [];
+    for (const { horarioId, updates } of updatesArray) {
+      try {
+        const resultado = await this.update(horarioId, updates);
+        resultados.push({ horarioId, success: true, data: resultado });
+      } catch (error) {
+        resultados.push({ horarioId, success: false, error: error.message });
+      }
     }
-    return actualizados;
+    
+    return resultados;
   },
 
+  /**
+   * Elimina un horario por su ID
+   */
   async delete(horarioId) {
     const params = {
       TableName: getSchedulesTable(),
       Key: marshall({ horarioId })
     };
     await client.send(new DeleteItemCommand(params));
-    return true;
+    return { eliminado: true, horarioId };
   }
 };

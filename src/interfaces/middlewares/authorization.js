@@ -19,7 +19,7 @@ class AuthorizationMiddleware {
         "list:centro", "read:centro",
         "read:public", "write:reservas", "cancel:propias",
         "update:perfil", "read:pagos_propios", "create:pagos",
-        "read:cupon",
+        "read:cupon", "read:horarios",
         "read:comprobantes_propios", "update:comprobantes_propios", "delete:comprobantes_propios",
         "create:resenas", "read:resenas", "update:resenas_propios", "delete:resenas_propios"
       ]

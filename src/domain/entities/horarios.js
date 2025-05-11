@@ -7,7 +7,6 @@ class Horario {
     horaInicio, // Hora de inicio del bloque (formato HH:MM)
     horaFin, // Hora de fin del bloque (formato HH:MM)
     estado, // Estado: "Disponible" o "Reservado"
-    reservaId, // ID de la reserva asociada (FK opcional)
     createdAt, // Fecha de creación del registro
     updatedAt // Fecha de última actualización
   }) {
@@ -15,14 +14,10 @@ class Horario {
     if (!horarioId || !canchaId || !fecha || !horaInicio || !horaFin) {
       throw new Error('Campos obligatorios faltantes: horarioId, canchaId, fecha, horaInicio, horaFin');
     }
-
-    // Validación de estado y coherencia con reservaId
-    if (estado === "Reservado" && !reservaId) {
-      throw new Error('Un horario en estado "Reservado" debe tener un reservaId asociado');
-    }
     
-    if (estado !== "Reservado" && reservaId) {
-      throw new Error('Un horario con reservaId debe estar en estado "Reservado"');
+    // Validamos que el estado sea válido
+    if (estado && !['Disponible', 'Reservado'].includes(estado)) {
+      throw new Error('Estado inválido. Debe ser "Disponible" o "Reservado"');
     }
 
     this.horarioId = horarioId;
@@ -31,7 +26,6 @@ class Horario {
     this.horaInicio = horaInicio;
     this.horaFin = horaFin;
     this.estado = estado || "Disponible"; // Valor por defecto
-    this.reservaId = reservaId || null; // Nulo si no está reservado
     this.createdAt = createdAt || new Date().toISOString();
     this.updatedAt = updatedAt || new Date().toISOString();
   }

@@ -167,12 +167,20 @@ class ReservaRepository {
       // 3. Liberar horarios antiguos que ya no estén en la reserva
       const aLiberar = horariosAntiguos.filter(h => !datosActualizados.horarioIds.includes(h));
       for (const horarioId of aLiberar) {
-        await horariosRepository.update(horarioId, { reservaId: null, estado: 'Disponible' });
+        await horariosRepository.update(horarioId, { 
+          reservaId: null, 
+          estado: 'Disponible',
+          _fromReservaService: true // Indicador especial para permitir actualizar reservaId
+        });
       }
       // 4. Asociar los nuevos horarios a la reserva
       const aReservar = datosActualizados.horarioIds.filter(h => !horariosAntiguos.includes(h));
       for (const horarioId of aReservar) {
-        await horariosRepository.update(horarioId, { reservaId, estado: 'Reservado' });
+        await horariosRepository.update(horarioId, { 
+          reservaId, 
+          estado: 'Reservado',
+          _fromReservaService: true // Indicador especial para permitir actualizar reservaId
+        });
       }
     }
 

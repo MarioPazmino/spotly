@@ -16,41 +16,13 @@ const ImagenCentroController = require('../../controllers/v1/uploadImagenes/Imag
 const { validateCentro, validateUpdateCentro, validateLocationSearch, validateCentroQuery } = require('../../../middlewares/validateCentroDeportivo');
 const Authorization = require('../../../middlewares/authorization');
 const { centroImageUploadMiddleware } = require('../../../middlewares/upload/centroImageUploadMiddleware');
-const checkCentroOwnership = require('../../../middlewares/auth/checkCentroOwnershipMiddleware');
 const { validate: isUuid } = require('uuid');
 
-// Middleware de autenticación para entorno de desarrollo
-const auth = (req, res, next) => {
-  // Verificar si estamos en producción o desarrollo
-  const isProduction = process.env.NODE_ENV === 'production';
-  
-  if (isProduction) {
-    // En producción, la autenticación real ya se maneja a través de API Gateway/Cognito
-    // Solo pasamos al siguiente middleware
-    return next();
-  }
-  
-  // En desarrollo, simulamos un usuario autenticado con permisos de super_admin
-  // para evitar problemas de permisos durante las pruebas
-  req.user = {
-    userId: 'test-user-id',
-    sub: 'test-user-id',
-    email: 'test@example.com',
-    name: 'Test User',
-    role: 'super_admin', // Usar super_admin para tener acceso completo
-    picture: null,
-    registrationSource: 'cognito',
-    pendienteAprobacion: null,
-    lastLogin: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    groups: ['super_admin'],
-    'cognito:groups': ['super_admin']
-  };
-  
-  console.log('Usuario simulado en desarrollo:', req.user);
-  next();
-};
+// Importar el middleware de autenticación JWT existente
+const auth = require('../../../middlewares/auth/jwtAuthMiddleware');
+
+// Importar el middleware de verificación de propiedad de centro deportivo
+const checkCentroOwnership = require('../../../middlewares/auth/checkCentroOwnershipMiddleware');
 
 /**
  * Middleware para validar UUID

@@ -2,23 +2,8 @@
 const express = require('express');
 const HorariosController = require('../../controllers/v1/HorariosController');
 const validarHorario = require('../../../middlewares/validarHorario');
-// Middleware de autenticación simplificado para desarrollo
-const auth = (req, res, next) => {
-  // En desarrollo, simulamos un usuario autenticado
-  req.user = {
-    userId: 'test-user-id',
-    email: 'test@example.com',
-    role: 'cliente',
-    picture: null,
-    registrationSource: 'cognito',
-    pendienteAprobacion: null,
-    lastLogin: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    groups: ['cliente']
-  };
-  next();
-};
+// Importar el middleware de autenticación JWT existente
+const auth = require('../../../middlewares/auth/jwtAuthMiddleware');
 const authorization = require('../../../middlewares/authorization');
 
 // El controlador ahora tiene su propio servicio implementado internamente
@@ -46,50 +31,19 @@ router.get('/:id', validateUUID('id'), (req, res, next) => controller.getById(re
 // GET /api/v1/horarios?canchaId=...&fecha=...
 router.get('/', (req, res, next) => controller.listByCanchaAndFecha(req, res, next));
 
-// GET /api/v1/horarios/by-reserva/:reservaId
-router.get('/by-reserva/:reservaId', validateUUID('reservaId'), (req, res, next) => controller.listByReservaId(req, res, next));
-
 // POST /api/v1/horarios
-router.post('/', auth, (req, res, next) => {
-  try {
-    authorization.checkPermission('write:horarios')(req.user.groups);
-    next();
-  } catch (error) {
-    next(error);
-  }
-}, validarHorario, (req, res, next) => controller.create(req, res, next));
+router.post('/', auth, authorization.checkPermission('write:horarios'), validarHorario, (req, res, next) => controller.create(req, res, next));
 
 // POST /api/v1/horarios/bulk
-router.post('/bulk', auth, (req, res, next) => {
-  try {
-    authorization.checkPermission('write:horarios')(req.user.groups);
-    next();
-  } catch (error) {
-    next(error);
-  }
-}, (req, res, next) => controller.bulkCreate(req, res, next));
+router.post('/bulk', auth, authorization.checkPermission('write:horarios'), (req, res, next) => controller.bulkCreate(req, res, next));
 
 // GET /api/v1/horarios/rango-fechas
 router.get('/rango-fechas', (req, res, next) => controller.listByCanchaAndRangoFechas(req, res, next));
 
 // PATCH /api/v1/horarios/:id
-router.patch('/:id', validateUUID('id'), auth, (req, res, next) => {
-  try {
-    authorization.checkPermission('update:horarios')(req.user.groups);
-    next();
-  } catch (error) {
-    next(error);
-  }
-}, validarHorario, (req, res, next) => controller.update(req, res, next));
+router.patch('/:id', validateUUID('id'), auth, authorization.checkPermission('update:horarios'), validarHorario, (req, res, next) => controller.update(req, res, next));
 
 // DELETE /api/v1/horarios/:id
-router.delete('/:id', validateUUID('id'), auth, (req, res, next) => {
-  try {
-    authorization.checkPermission('delete:horarios')(req.user.groups);
-    next();
-  } catch (error) {
-    next(error);
-  }
-}, (req, res, next) => controller.delete(req, res, next));
+router.delete('/:id', validateUUID('id'), auth, authorization.checkPermission('delete:horarios'), (req, res, next) => controller.delete(req, res, next));
 
 module.exports = router;

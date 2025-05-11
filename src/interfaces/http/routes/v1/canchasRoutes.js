@@ -3,15 +3,15 @@
  * Rutas para la gestión de canchas deportivas
  * Responsabilidad única: Definir las rutas y sus controladores asociados
  */
-const express = require('express');
+const express = require ('express');
 const router = express.Router();
 const CanchasController = require('../../controllers/v1/CanchasController');
 
 // Importar el middleware de verificación de propiedad de canchas
 const { checkCanchaOwnershipMiddleware } = require('../../../middlewares/auth/checkCanchaOwnershipMiddleware');
 
-// Importar el middleware de autenticación
-const auth = require('../../../middlewares/auth/authMiddleware');
+// Importar el middleware de autenticación JWT
+const auth = require('../../../middlewares/auth/jwtAuthMiddleware');
 
 // Importar el controlador de imágenes de canchas
 const ImagenCanchaController = require('../../controllers/v1/uploadImagenes/ImagenCanchaController');

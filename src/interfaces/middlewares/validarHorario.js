@@ -9,18 +9,33 @@ function esHoraValida(hora) {
 
 module.exports = function validarHorario(req, res, next) {
   const { horaInicio, horaFin, canchaId, fecha } = req.body;
-
-  if (!canchaId || !fecha || !horaInicio || !horaFin) {
-    return res.status(400).json({ error: 'Se requieren canchaId, fecha, horaInicio y horaFin.' });
+  const metodo = req.method;
+  
+  // Para POST (crear nuevo), exigir todos los campos
+  if (metodo === 'POST') {
+    if (!canchaId || !fecha || !horaInicio || !horaFin) {
+      return res.status(400).json({ error: 'Se requieren canchaId, fecha, horaInicio y horaFin.' });
+    }
   }
-
-  if (!esHoraValida(horaInicio) || !esHoraValida(horaFin)) {
-    return res.status(400).json({ error: 'El formato de hora debe ser HH:mm.' });
+  
+  // Para PATCH (actualización parcial), validar solo los campos presentes
+  if (metodo === 'PATCH') {
+    // No validamos campos requeridos, solo los que están presentes
   }
-
-  if (horaInicio >= horaFin) {
+  
+  // Validar formato de horas si están presentes
+  if (horaInicio && !esHoraValida(horaInicio)) {
+    return res.status(400).json({ error: 'El formato de hora de inicio debe ser HH:mm.' });
+  }
+  
+  if (horaFin && !esHoraValida(horaFin)) {
+    return res.status(400).json({ error: 'El formato de hora de fin debe ser HH:mm.' });
+  }
+  
+  // Validar que horaInicio < horaFin solo si ambos están presentes
+  if (horaInicio && horaFin && horaInicio >= horaFin) {
     return res.status(400).json({ error: 'La hora de inicio debe ser menor que la de fin.' });
   }
-
+  
   next();
 };
