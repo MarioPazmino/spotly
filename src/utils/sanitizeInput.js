@@ -235,6 +235,35 @@ const sanitizeCentroDeportivo = (centro) => {
   };
 };
 
+/**
+ * Sanitiza un objeto genérico recursivamente
+ * @param {Object} obj - Objeto a sanitizar
+ * @returns {Object} Objeto sanitizado
+ */
+function sanitizeObject(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  
+  // Si es un array, sanitizar cada elemento
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeObject(item));
+  }
+  
+  // Si es un objeto, sanitizar cada propiedad
+  const sanitized = {};
+  for (const [key, value] of Object.entries(obj)) {
+    // Sanitizar valores según su tipo
+    if (typeof value === 'string') {
+      sanitized[key] = sanitizeText(value);
+    } else if (typeof value === 'object') {
+      sanitized[key] = sanitizeObject(value);
+    } else {
+      sanitized[key] = value; // Mantener valores numéricos, booleanos, etc.
+    }
+  }
+  
+  return sanitized;
+}
+
 module.exports = {
   sanitizeText,
   sanitizeId,
@@ -242,6 +271,7 @@ module.exports = {
   sanitizeNumber,
   sanitizeDate,
   sanitizeResena,
+  sanitizeObject,
   sanitizeUsuario,
   sanitizeCancha,
   sanitizeCentroDeportivo,

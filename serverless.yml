@@ -67,6 +67,7 @@ provider:
             # Recursos para tabla Canchas
             - !GetAtt CanchasTable.Arn
             - !Join ["", [!GetAtt CanchasTable.Arn, "/*"]]
+            - !Join ["", [!GetAtt CanchasTable.Arn, "/index/CentroIdIndex"]]
             # Recursos para tabla Usuarios
             - !GetAtt UsuariosTable.Arn
             - !Join ["", [!GetAtt UsuariosTable.Arn, "/*"]]
@@ -715,15 +716,15 @@ resources:
         AttributeDefinitions:
           - AttributeName: canchaId
             AttributeType: S
-          - AttributeName: centroDeportivoId
+          - AttributeName: centroId
             AttributeType: S
         KeySchema:
           - AttributeName: canchaId
             KeyType: HASH
         GlobalSecondaryIndexes:
-          - IndexName: CentroDeportivoIndex
+          - IndexName: CentroIdIndex
             KeySchema:
-              - AttributeName: centroDeportivoId
+              - AttributeName: centroId
                 KeyType: HASH
             Projection:
               ProjectionType: ALL

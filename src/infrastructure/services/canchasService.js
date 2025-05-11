@@ -2,62 +2,120 @@
 const CanchasRepository = require('../repositories/canchasRepository');
 const Cancha = require('../../domain/entities/cancha');
 const { v4: uuidv4 } = require('uuid');
-const { uploadImage, getPresignedUrl } = require('./s3Service');
-const AWS = require('aws-sdk');
 const { sanitizeObject } = require('../../utils/sanitizeInput');
+const CanchaImagenService = require('./canchas/canchaImagenService');
+// Importar el servicio de imágenes para S3
+const canchaImageService = require('./canchas/canchaImageService');
+const AWS = require('aws-sdk');
 
 class CanchasService {
   constructor() {
     this.repo = new CanchasRepository();
+    this.imagenService = new CanchaImagenService(this.repo);
   }
 
-  // Método privado para procesar imágenes (solo archivos subidos)
-  async _procesarImagenes(files = [], centroId) {
-    let imagenes = [];
-    // Procesar archivos
-    if (files && files.length > 0) {
-      for (const file of files) {
-        const key = await uploadImage(file.buffer, file.originalname, centroId);
-        imagenes.push(key);
-      }
-    }
-    // Limitar a 3 imágenes
-    return imagenes.slice(0, 3);
-  }
+  // El procesamiento de imágenes ahora se maneja directamente a través del servicio especializado CanchaImagenService
 
   async createCancha(canchaData, files = []) {
+    // Sanitizar datos de entrada
     const cleanData = sanitizeObject(canchaData);
-    const imagenes = await this._procesarImagenes(files, cleanData.centroId);
+    
+    // Generar un ID único para la nueva cancha
+    const canchaId = uuidv4();
+    
+    // Crear la cancha primero sin imágenes
     const cancha = new Cancha({
       ...cleanData,
-      canchaId: uuidv4(),
-      imagenes,
+      canchaId,
+      imagenes: [], // Inicialmente sin imágenes
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
-    return await this.repo.save(cancha);
+    
+    // Guardar la cancha en la base de datos
+    const canchaGuardada = await this.repo.save(cancha);
+    
+    // Si hay archivos para procesar, actualizar la cancha con las imágenes
+    if (files && files.length > 0) {
+      try {
+        // Ahora que tenemos un canchaId, podemos procesar las imágenes
+        const resultado = await this.imagenService.processCanchaImages(canchaId, files, 'system');
+        
+        // Actualizar la cancha con las imágenes procesadas
+        if (resultado && resultado.imagenes && resultado.imagenes.length > 0) {
+          return await this.updateCancha(canchaId, { imagenes: resultado.imagenes });
+        }
+      } catch (error) {
+        console.error(`Error procesando imágenes para nueva cancha: ${error.message}`);
+        // Continuamos devolviendo la cancha aunque haya fallado el procesamiento de imágenes
+      }
+    }
+    
+    return canchaGuardada;
   }
 
   async updateCancha(canchaId, updateData, files = []) {
     // Obtener cancha actual
     const canchaActual = await this.repo.findById(canchaId);
     if (!canchaActual) throw new Error('Cancha no encontrada');
+    
     // Sanitizar datos de entrada
     const cleanData = sanitizeObject(updateData);
-    // Unir imágenes actuales con nuevas
-    let imagenes = canchaActual.imagenes || [];
-    const nuevasImagenes = await this._procesarImagenes(files, canchaActual.centroId);
-    imagenes = [...imagenes, ...nuevasImagenes].slice(0, 3);
-    if (imagenes.length > 3) {
-      throw new Error('No se permiten más de 3 imágenes por cancha.');
+    
+    // Filtrar solo los campos válidos definidos en la entidad Cancha
+    const validFields = [
+      'tipo',
+      'capacidad',
+      'precioPorHora',
+      'estado',
+      'descripcion',
+      'equipamientoIncluido'
+      // No permitimos actualizar canchaId o centroId directamente
+    ];
+    
+    // Crear un objeto con solo los campos válidos
+    const filteredData = {};
+    for (const field of validFields) {
+      if (cleanData[field] !== undefined) {
+        filteredData[field] = cleanData[field];
+      }
     }
-    cleanData.imagenes = imagenes;
-    cleanData.updatedAt = new Date().toISOString();
+    
+    // Manejar imágenes usando el servicio especializado
+    let imagenes = canchaActual.imagenes || [];
+    
+    // Procesar nuevas imágenes si hay archivos
+    if (files && files.length > 0) {
+      try {
+        // Usar directamente el servicio especializado para procesar las imágenes
+        const resultado = await this.imagenService.processCanchaImages(canchaId, files, 'system');
+        
+        // Actualizar las imágenes con las nuevas procesadas
+        if (resultado && resultado.imagenes) {
+          // Extraer solo las claves de las imágenes (no las URLs)
+          imagenes = resultado.imagenes.map(img => {
+            // Si es una URL, extraer la clave
+            if (typeof img === 'string' && img.includes('amazonaws.com')) {
+              const parts = img.split('/');
+              return parts.slice(parts.indexOf('centros')).join('/');
+            }
+            return img;
+          });
+        }
+      } catch (error) {
+        console.error(`Error procesando imágenes para actualizar cancha: ${error.message}`);
+        throw error;
+      }
+    }
+    
+    // Añadir campos obligatorios
+    filteredData.imagenes = imagenes;
+    filteredData.updatedAt = new Date().toISOString();
+    
     // Condición optimista: solo actualiza si las imágenes no cambiaron desde que las leíste
     const params = {
-      ...cleanData,
-      imagenes,
-      updatedAt: cleanData.updatedAt
+      ...filteredData,
+      updatedAt: filteredData.updatedAt
     };
     try {
       // Usar condición de DynamoDB para evitar sobrescribir si alguien más modificó imágenes
@@ -83,54 +141,130 @@ class CanchasService {
     const cancha = await this.repo.findById(canchaId);
     if (cancha && Array.isArray(cancha.imagenes)) {
       // Eliminar solo las imágenes que son keys de S3 (no URLs externas)
-      const s3Keys = cancha.imagenes.filter(img => typeof img === 'string' && img.startsWith('centros/'));
+      const s3Keys = cancha.imagenes.filter(img => 
+        typeof img === 'string' && (img.startsWith('canchas/') || img.startsWith('centros/'))
+      );
+      
+      // Usar el servicio de imágenes para eliminar las imágenes
       if (s3Keys.length > 0) {
-        const s3 = new AWS.S3({ region: process.env.AWS_REGION || 'us-east-1' });
-        const BUCKET = process.env.IMAGENES_CENTROS_BUCKET || `spotly-centros-imagenes-dev`;
-        const deleteParams = {
-          Bucket: BUCKET,
-          Delete: {
-            Objects: s3Keys.map(Key => ({ Key })),
-            Quiet: true
+        for (const key of s3Keys) {
+          try {
+            await canchaImageService.deleteCanchaImage(key);
+          } catch (error) {
+            console.error(`Error al eliminar imagen ${key}: ${error.message}`);
+            // Continuar con las siguientes imágenes aunque falle una
           }
-        };
-        await s3.deleteObjects(deleteParams).promise();
+        }
       }
     }
     // Eliminar la cancha de la base de datos
     return await this.repo.delete(canchaId);
   }
 
+  /**
+   * Elimina una imagen específica de una cancha por su índice
+   * @param {string} canchaId - ID de la cancha
+   * @param {number} index - Índice de la imagen a eliminar
+   * @param {string} userId - ID del usuario que realiza la solicitud
+   * @returns {Promise<Object>} Cancha actualizada sin la imagen eliminada
+   */
+  async deleteImagenCancha(canchaId, index, userId) {
+    try {
+      // Utilizamos el servicio especializado para eliminar la imagen por índice
+      return await this.imagenService.deleteCanchaImageByIndex(canchaId, index, userId);
+    } catch (error) {
+      console.error(`Error al eliminar imagen de cancha por índice: ${error.message}`);
+      throw error;
+    }
+  }
+
   async listCanchasByCentro(centroId, options = {}) {
-    // Paginación nativa con DynamoDB y filtros simples (tipo, disponible)
-    const limit = parseInt(options.limit, 10) || 10;
-    const lastEvaluatedKey = options.lastEvaluatedKey || undefined;
-    const tipo = options.tipo;
-    const disponible = options.disponible;
-    const result = await this.repo.findAllByCentro(centroId, { limit, lastEvaluatedKey, tipo, disponible });
-    // Convertir solo keys S3 válidas a presigned URLs
-    const mapped = result.items.map(cancha => {
-      cancha.imagenes = (cancha.imagenes || [])
-        .filter(img => typeof img === 'string' && img.startsWith('centros/'))
-        .map(key => getPresignedUrl(key));
-      return cancha;
-    });
-    return {
-      items: mapped,
-      limit,
-      count: result.count,
-      lastEvaluatedKey: result.lastEvaluatedKey
-    };
+    try {
+      // Paginación nativa con DynamoDB y filtros simples (tipo, disponible)
+      const limit = parseInt(options.limit, 10) || 10;
+      const lastEvaluatedKey = options.lastEvaluatedKey || undefined;
+      const tipo = options.tipo;
+      const disponible = options.disponible;
+      
+      const result = await this.repo.findByCentroId(centroId, { limit, lastEvaluatedKey, tipo, disponible });
+      
+      // Enriquecer los resultados con URLs firmadas para las imágenes
+      if (result.items && result.items.length > 0) {
+        for (const cancha of result.items) {
+          if (cancha.imagenes && Array.isArray(cancha.imagenes)) {
+            cancha.imagenes = await Promise.all(
+              cancha.imagenes.map(async (key) => {
+                if (typeof key === 'string' && (key.startsWith('canchas/') || key.startsWith('centros/'))) {
+                  // Usar el servicio de imágenes para obtener la URL presignada
+                  return canchaImageService.getCanchaImageUrl(key);
+                }
+                return key; // Si no es una key de S3, devolver tal cual
+              })
+            );
+          }
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      console.error(`Error al listar canchas por centro ${centroId}:`, error);
+      throw error;
+    }
   }
 
   async getCanchaById(canchaId) {
-    const cancha = await this.repo.findById(canchaId);
-    if (!cancha) return null;
-    // Solo retornar presigned URLs para keys de S3 válidas
-    cancha.imagenes = (cancha.imagenes || [])
-      .filter(img => typeof img === 'string' && img.startsWith('centros/'))
-      .map(key => getPresignedUrl(key));
-    return cancha;
+    try {
+      const cancha = await this.repo.findById(canchaId);
+      if (!cancha) {
+        const error = new Error('Cancha no encontrada');
+        error.statusCode = 404;
+        throw error;
+      }
+      
+      // Enriquecer con URLs firmadas para las imágenes
+      if (cancha.imagenes && Array.isArray(cancha.imagenes)) {
+        cancha.imagenes = await Promise.all(
+          cancha.imagenes.map(async (key) => {
+            if (typeof key === 'string' && (key.startsWith('canchas/') || key.startsWith('centros/'))) {
+              // Usar el servicio de imágenes para obtener la URL presignada
+              return canchaImageService.getCanchaImageUrl(key);
+            }
+            return key; // Si no es una key de S3, devolver tal cual
+          })
+        );
+      }
+      
+      return cancha;
+    } catch (error) {
+      console.error(`Error al obtener cancha ${canchaId}:`, error);
+      throw error;
+    }
+  }
+
+  async getAllCanchas(options = {}) {
+    try {
+      const result = await this.repo.findAll(options);
+      // Enriquecer los resultados con URLs firmadas para las imágenes
+      if (result.items && result.items.length > 0) {
+        for (const cancha of result.items) {
+          if (cancha.imagenes && Array.isArray(cancha.imagenes)) {
+            cancha.imagenes = await Promise.all(
+              cancha.imagenes.map(async (key) => {
+                if (typeof key === 'string' && (key.startsWith('canchas/') || key.startsWith('centros/'))) {
+                  // Usar el servicio de imágenes para obtener la URL presignada
+                  return canchaImageService.getCanchaImageUrl(key);
+                }
+                return key; // Si no es una key de S3, devolver tal cual
+              })
+            );
+          }
+        }
+      }
+      return result;
+    } catch (error) {
+      console.error('Error al obtener todas las canchas:', error);
+      throw error;
+    }
   }
 }
 
