@@ -1,67 +1,86 @@
 // src/interfaces/middlewares/validarCuponDescuento.js
-// Middleware para validar cupones de descuento en solicitudes HTTP
+/**
+ * Middleware para validar cupones de descuento
+ * Responsabilidad única: validación de datos de cupones en las solicitudes
+ */
 
-function esCodigoValido(codigo) {
-  // Solo letras, números, guiones, 5-20 caracteres
-  return /^[A-Z0-9\-]{5,20}$/i.test(codigo);
+const validador = require('../middlewares/validation/cuponDescuentoValidador');
+const { validate: isUuid } = require('uuid');
+
+/**
+ * Middleware para validar UUID de cupón
+ */
+function validarCuponUUID(req, res, next) {
+  const cuponId = req.params.cuponId;
+  if (!cuponId || !isUuid(cuponId)) {
+    return res.status(400).json({
+      error: 'UUID Inválido',
+      mensaje: 'El parámetro cuponId debe ser un UUID válido',
+      code: 'INVALID_UUID'
+    });
+  }
+  next();
 }
 
-module.exports = function validarCuponDescuento(req, res, next) {
-  const { centroId, codigo, tipoDescuento, valor, fechaInicio, fechaFin, maximoUsos } = req.body;
-
-  if (!centroId || !codigo || !tipoDescuento || valor === undefined || !fechaInicio || !fechaFin) {
-    return res.status(400).json({ error: 'Se requieren centroId, codigo, tipoDescuento, valor, fechaInicio y fechaFin.' });
+/**
+ * Middleware para validar UUID de centro deportivo
+ */
+function validarCentroUUID(req, res, next) {
+  const centroId = req.params.centroId;
+  if (!centroId || !isUuid(centroId)) {
+    return res.status(400).json({
+      error: 'UUID Inválido',
+      mensaje: 'El parámetro centroId debe ser un UUID válido',
+      code: 'INVALID_UUID'
+    });
   }
-  if (!esCodigoValido(codigo)) {
-    return res.status(400).json({ error: 'El código del cupón no es válido.' });
-  }
-  if (!["porcentaje", "monto_fijo"].includes(tipoDescuento)) {
-    return res.status(400).json({ error: 'tipoDescuento debe ser "porcentaje" o "monto_fijo".' });
-  }
-  if (typeof valor !== 'number' || valor <= 0) {
-    return res.status(400).json({ error: 'El valor del descuento debe ser un número positivo.' });
-  }
-  // Validar fechas formato ISO simple
-  if (!/^\d{4}-\d{2}-\d{2}/.test(fechaInicio) || !/^\d{4}-\d{2}-\d{2}/.test(fechaFin)) {
-    return res.status(400).json({ error: 'Las fechas deben tener formato YYYY-MM-DD.' });
-  }
-  // Validar que fechaFin sea posterior a fechaInicio
-  if (new Date(fechaFin) <= new Date(fechaInicio)) {
-    return res.status(400).json({ error: 'fechaFin debe ser posterior a fechaInicio.' });
-  }
-  // Validar formato de fechaInicio y fechaFin (YYYY-MM-DDTHH:mmZ)
-  // Permitir fechaInicio y fechaFin como YYYY-MM-DD o YYYY-MM-DDTHH:mmZ
-  const isoFecha = /^\d{4}-\d{2}-\d{2}$/;
-  const isoSinSegundos = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z$/;
-  if (req.body.fechaInicio) {
-    if (isoFecha.test(req.body.fechaInicio)) {
-      req.body.fechaInicio = req.body.fechaInicio + 'T00:00Z';
-    } else if (!isoSinSegundos.test(req.body.fechaInicio)) {
-      return res.status(400).json({ error: 'fechaInicio debe tener formato YYYY-MM-DD o YYYY-MM-DDTHH:mmZ (sin segundos).' });
-    }
-  }
-  if (req.body.fechaFin) {
-    if (isoFecha.test(req.body.fechaFin)) {
-      req.body.fechaFin = req.body.fechaFin + 'T23:59Z';
-    } else if (!isoSinSegundos.test(req.body.fechaFin)) {
-      return res.status(400).json({ error: 'fechaFin debe tener formato YYYY-MM-DD o YYYY-MM-DDTHH:mmZ (sin segundos).' });
-    }
-  }
-  // Validar tipoDescuento y valor
-  if (tipoDescuento === 'porcentaje') {
-    if (!Number.isInteger(valor) || valor < 1 || valor > 100) {
-      return res.status(400).json({ error: 'Si tipoDescuento es "porcentaje", valor debe ser un entero entre 1 y 100.' });
-    }
-  } else if (tipoDescuento === 'monto_fijo') {
-    if (typeof valor !== 'number' || valor <= 0) {
-      return res.status(400).json({ error: 'Si tipoDescuento es "monto_fijo", valor debe ser un número mayor a 0.' });
-    }
-  }
-
-  // Validar que maximoUsos sea entero y >= 1 si está presente
-  if (maximoUsos !== undefined && (!Number.isInteger(maximoUsos) || maximoUsos < 1)) {
-    return res.status(400).json({ error: 'maximoUsos debe ser un entero mayor o igual a 1.' });
-  }
-
   next();
+}
+
+/**
+ * Middleware para validar datos de creación de cupón
+ */
+function validarCrearCupon(req, res, next) {
+  // Aplicar validación
+  const resultado = validador.validarCrearCupon(req.body);
+  if (!resultado.valido) {
+    const { status, code, message, detalles } = resultado.error;
+    return res.status(status).json({
+      error: message,
+      mensaje: message,
+      detalles,
+      code
+    });
+  }
+  
+  next();
+}
+
+/**
+ * Middleware para validar datos de actualización de cupón
+ */
+function validarActualizarCupon(req, res, next) {
+  // Asegurar que el cuponId de la URL esté en el cuerpo
+  req.body.cuponId = req.params.cuponId;
+  
+  // Aplicar validación
+  const resultado = validador.validarActualizarCupon(req.body);
+  if (!resultado.valido) {
+    const { status, code, message, detalles } = resultado.error;
+    return res.status(status).json({
+      error: message,
+      mensaje: message,
+      detalles,
+      code
+    });
+  }
+  
+  next();
+}
+
+module.exports = {
+  validarCuponUUID,
+  validarCentroUUID,
+  validarCrearCupon,
+  validarActualizarCupon
 };

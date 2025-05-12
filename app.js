@@ -3,6 +3,8 @@ const express = require('express');
 const serverless = require('serverless-http');
 const cors = require('cors');
 const errorHandler = require('./src/interfaces/middlewares/errorHandler');
+const expressErrorHandler = require('./src/interfaces/middlewares/expressErrorHandler');
+const procesarCuerpo = require('./src/interfaces/middlewares/procesarCuerpoMiddleware');
 const routes = require('./src/interfaces/http/routes');
 
 // Validación de variables de entorno críticas al iniciar la app
@@ -35,7 +37,8 @@ const ResenaRepository = require('./src/infrastructure/repositories/resenaReposi
 // Instanciar los repositorios que son clases
 const userRepository = new UserRepository();
 const canchasRepository = new CanchasRepository();
-const cuponDescuentoRepository = new CuponDescuentoRepository();
+// cuponDescuentoRepository ya es una instancia, no necesitamos usar 'new'
+const cuponDescuentoRepository = require('./src/infrastructure/repositories/cuponDescuentoRepository');
 const pagosRepository = new PagosRepository();
 const resenaRepository = new ResenaRepository();
 // Configuración de middlewares
@@ -51,6 +54,10 @@ app.use(cors({
   exposedHeaders: ['X-Access-Token'] // Permitir encabezados personalizados
 }));
 app.use(express.json()); // Parsear JSON en las solicitudes
+
+// El middleware de procesamiento de buffers está ahora en un archivo separado
+// y se aplica específicamente en las rutas que lo necesitan
+// para mantener la responsabilidad única
 
 // Rutas principales
 // Verificar si la URL ya tiene el prefijo /api para evitar duplicación
@@ -70,11 +77,14 @@ app.use((req, res) => {
   res.status(404).json({ 
     statusCode: 404,
     error: 'Not Found', 
-    message: 'Ruta no encontrada' 
+    mensaje: 'Ruta no encontrada',
+    code: 'NOT_FOUND'
   });
 });
 
-// Middleware de manejo de errores
-app.use(errorHandler);
+// Middleware de manejo de errores para Express
+app.use(expressErrorHandler);
+
+// Mantenemos el manejador de errores de serverless para Lambda
 module.exports.handler = serverless(app);
 module.exports.app = app;

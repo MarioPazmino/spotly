@@ -1,7 +1,7 @@
 //src/infrastructure/services/braintreeService.js
 const braintree = require('braintree');
 const Boom = require('@hapi/boom');
-const logger = require('../../interfaces/http/utils/logger');
+const logger = require('../../utils/logger');
 const CentroDeportivoRepository = require('../repositories/centroDeportivoRepository');
 
 /**

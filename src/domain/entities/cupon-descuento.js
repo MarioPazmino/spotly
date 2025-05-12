@@ -9,6 +9,7 @@ class CuponesDescuento {
       fechaInicio, // Fecha de inicio de validez (formato ISO: '2025-04-01T09:00Z')
       fechaFin,    // Fecha de fin de validez (formato ISO: '2025-04-07T23:59Z')
       maximoUsos, // Número máximo de veces que puede usar CADA USUARIO
+      usuariosUsos = {}, // Mapa de userId -> número de usos
       createdAt, // Fecha de creación
       updatedAt // Fecha de última actualización
     }) {
@@ -23,6 +24,7 @@ class CuponesDescuento {
         throw new Error('maximoUsos debe ser un entero mayor o igual a 1');
       }
       this.maximoUsos = maximoUsos;
+      this.usuariosUsos = usuariosUsos;
       this.createdAt = createdAt || new Date().toISOString();
       this.updatedAt = updatedAt || new Date().toISOString();
     }
@@ -34,6 +36,17 @@ class CuponesDescuento {
         return this.valor;
       }
       return 0;
+    }
+
+    // Método para verificar si un usuario puede usar el cupón
+    puedeUsarCupon(userId) {
+      const usosUsuario = this.usuariosUsos[userId] || 0;
+      return usosUsuario < this.maximoUsos;
+    }
+
+    // Método para obtener el número de usos de un usuario
+    getUsosUsuario(userId) {
+      return this.usuariosUsos[userId] || 0;
     }
   }
   module.exports = CuponesDescuento;

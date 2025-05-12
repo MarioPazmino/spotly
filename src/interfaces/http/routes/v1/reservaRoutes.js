@@ -3,24 +3,8 @@ const express = require('express');
 const router = express.Router();
 const validarReserva = require('../../../middlewares/validarReserva');
 const reservaController = require('../../controllers/v1/reservaController');
-// Middleware de autenticación simplificado para desarrollo
-const auth = (req, res, next) => {
-  // En desarrollo, simulamos un usuario autenticado
-  req.user = {
-    userId: 'test-user-id',
-    email: 'test@example.com',
-    name: 'Test User',
-    role: 'cliente',
-    picture: null,
-    registrationSource: 'cognito',
-    pendienteAprobacion: null,
-    lastLogin: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    groups: ['cliente']
-  };
-  next();
-};
+// Importar el middleware de autenticación JWT
+const auth = require('../../../middlewares/auth/jwtAuthMiddleware');
 const authorization = require('../../../middlewares/authorization');
 const { validate: isUuid } = require('uuid');
 
