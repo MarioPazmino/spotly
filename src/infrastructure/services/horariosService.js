@@ -179,36 +179,11 @@ class HorariosService {
 
   }
 
-  /**
-   * Actualiza múltiples horarios a la vez
-   * @param {Array} updatesArray [{horarioId, ...camposAActualizar}]
-   */
-  async bulkUpdate(updatesArray) {}
+  // Método bulkUpdate eliminado porque no se usa en las rutas actuales
 
-  /**
-   * Elimina todos los horarios de una cancha en un rango de fechas
-   * @param {string} canchaId
-   * @param {string} fechaInicio
-   * @param {string} fechaFin
-   * @returns {Promise<Array>} Array de horarioIds eliminados
-   */
-  async deleteByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin) {
-    return await this.repo.deleteByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin);
-  }
+  // Método deleteByCanchaAndRangoFechas eliminado porque no se usa en las rutas actuales
 
-  async bulkUpdate(updatesArray) {
-    if (!Array.isArray(updatesArray) || updatesArray.length === 0) {
-      throw new Error('Debe enviar un array de actualizaciones');
-    }
-    const actualizados = [];
-    for (const upd of updatesArray) {
-      if (!upd.horarioId) throw new Error('Falta horarioId en una actualización');
-      // Puedes agregar validaciones de solapamiento si es necesario
-      const actualizado = await this.repo.update(upd.horarioId, upd);
-      actualizados.push(actualizado);
-    }
-    return actualizados;
-  }
+  // Segunda implementación de bulkUpdate eliminada porque está duplicada y no se usa en las rutas actuales
 }
 
 module.exports = new HorariosService();

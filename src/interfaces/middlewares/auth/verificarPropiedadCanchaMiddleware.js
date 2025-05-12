@@ -9,6 +9,9 @@ function verificarPropiedadCanchasBulk(req, res, next) {
     const userId = req.user.sub || req.user.userId;
     const userGroups = req.user.groups || req.user['cognito:groups'] || [];
     
+    // Instanciar repositorios
+    const canchasRepository = new CanchasRepository();
+    
     // Verificar que se proporcionaron horarios
     if (!req.body.horarios || !Array.isArray(req.body.horarios) || req.body.horarios.length === 0) {
       return res.status(400).json({
@@ -24,8 +27,6 @@ function verificarPropiedadCanchasBulk(req, res, next) {
     
     // Para usuarios normales, obtener primero todas sus canchas para validación estricta
     if (!userGroups.includes('super_admin') && !userGroups.includes('admin_centro')) {
-      const canchasRepository = new CanchasRepository();
-      
       centroDeportivoRepository.findByAdminId(userId)
         .then(async centros => {
           if (!centros || centros.length === 0) {
@@ -65,30 +66,67 @@ function verificarPropiedadCanchasBulk(req, res, next) {
                 return res.status(403).json({
                   statusCode: 403,
                   error: 'Forbidden',
-                  message: `La cancha con ID ${canchaId} no existe o no te pertenece.`
+                  message: `La cancha con ID ${canchaId} no existe o no te pertenece.`,
+                  canchasDisponibles: todasLasCanchasDelUsuario.map(c => ({
+                    canchaId: c.canchaId,
+                    nombre: c.nombre || c.tipo,
+                    tipo: c.tipo,
+                    centroId: c.centroId
+                  }))
                 });
               }
             }
           }
           
-          // Si hay horarios sin cancha y el usuario tiene una sola cancha, asignarla automáticamente
+          // Si no hay canchaIds pero hay horarios sin cancha, mostrar error
           if (horariosSinCancha.length > 0) {
-            if (todasLasCanchasDelUsuario.length === 1) {
-              const unicaCancha = todasLasCanchasDelUsuario[0].canchaId;
+            // Los superadmins y admin_centro necesitan especificar la cancha explícitamente
+            if (userGroups.includes('super_admin') || userGroups.includes('admin_centro')) {
+              return res.status(400).json({
+                statusCode: 400,
+                error: 'Bad Request',
+                message: 'Como administrador, debes especificar explícitamente el canchaId en todos los horarios'
+              });
+            }
+            
+            // Para usuarios regulares, buscar sus centros deportivos y canchas
+            const centros = await centroDeportivoRepository.findByAdminId(userId);
+            
+            if (!centros || centros.length === 0) {
+              return res.status(403).json({
+                statusCode: 403,
+                error: 'Forbidden',
+                message: 'No tienes ningún centro deportivo asociado'
+              });
+            }
+            
+            // Si tiene un solo centro, buscar sus canchas
+            const centroId = centros[0].centroId;
+            const resultadoCanchas = await canchasRepository.findAllByCentro(centroId);
+            const canchas = resultadoCanchas.items || [];
+            
+            if (!canchas || canchas.length === 0) {
+              return res.status(404).json({
+                statusCode: 404,
+                error: 'Not Found',
+                message: 'No se encontraron canchas asociadas a tu centro deportivo'
+              });
+            }
+            
+            // Si tiene una sola cancha, usar esa automáticamente para todos los horarios sin cancha
+            if (canchas.length === 1) {
+              const unicaCancha = canchas[0].canchaId;
+              // Asignar la única cancha a todos los horarios que no tengan canchaId
               req.body.horarios = req.body.horarios.map(h => ({
                 ...h,
                 canchaId: h.canchaId || unicaCancha
               }));
             } else {
+              // Si tiene múltiples canchas, necesita especificar cuál
               return res.status(400).json({
                 statusCode: 400,
                 error: 'Bad Request',
-                message: 'Debes especificar el ID de la cancha para cada horario. Tienes múltiples canchas disponibles.',
-                canchasDisponibles: todasLasCanchasDelUsuario.map(c => ({ 
-                  canchaId: c.canchaId, 
-                  nombre: c.nombre || c.tipo,
-                  tipo: c.tipo
-                }))
+                message: 'Tienes múltiples canchas. Debes especificar para cuál quieres crear cada horario (canchaId)'
               });
             }
           }
@@ -109,19 +147,67 @@ function verificarPropiedadCanchasBulk(req, res, next) {
     
     // Para superadmins y admin_centro, solo verificamos que las canchas existan
     if (canchaIds.length > 0) {
-      const canchasRepository = new CanchasRepository();
-      
-      // Verificar cada cancha de manera asíncrona
-      Promise.all(canchaIds.map(id => canchasRepository.findById(id)))
-        .then(results => {
-          // Verificar si alguna cancha no existe
-          for (let i = 0; i < results.length; i++) {
-            if (!results[i]) {
+      // Función asíncrona para verificar las canchas
+      const verificarCanchas = async () => {
+        try {
+          // Crear instancias de los repositorios
+          const canchasRepository = new CanchasRepository();
+          
+          // Obtener todas las canchas especificadas
+          const canchasEncontradas = await Promise.all(canchaIds.map(id => canchasRepository.findById(id)));
+          
+          // Verificar que todas las canchas existen
+          for (let i = 0; i < canchasEncontradas.length; i++) {
+            if (!canchasEncontradas[i]) {
+              // Para superadmins y admin_centro, intentar proporcionar todas las canchas disponibles
+              let canchasDisponibles = [];
+              try {
+                // Obtener una lista básica de todas las canchas para mostrar al administrador
+                const resultadoTodas = await canchasRepository.findAll({ limit: 10 });
+                canchasDisponibles = (resultadoTodas.items || []).map(c => ({
+                  canchaId: c.canchaId,
+                  nombre: c.nombre || c.tipo,
+                  tipo: c.tipo,
+                  centroId: c.centroId
+                }));
+              } catch (error) {
+                console.error('Error al obtener canchas disponibles:', error);
+              }
+              
               return res.status(404).json({
                 statusCode: 404,
                 error: 'Not Found',
-                message: `No se encontró la cancha con ID ${canchaIds[i]}`
+                message: `No se encontró la cancha con ID ${canchaIds[i]}`,
+                canchasDisponibles
               });
+            }
+          }
+          
+          // Para usuarios regulares, verificar que las canchas les pertenecen
+          if (!userGroups.includes('super_admin') && !userGroups.includes('admin_centro')) {
+            // Obtener centros del usuario
+            const centros = await centroDeportivoRepository.findByAdminId(userId);
+            
+            if (!centros || centros.length === 0) {
+              return res.status(403).json({
+                statusCode: 403,
+                error: 'Forbidden',
+                message: 'No tienes ningún centro deportivo asociado'
+              });
+            }
+            
+            const centroIds = centros.map(c => c.centroId);
+            
+            // Verificar que cada cancha pertenece a uno de los centros del usuario
+            for (let i = 0; i < canchasEncontradas.length; i++) {
+              const cancha = canchasEncontradas[i];
+              if (!centroIds.includes(cancha.centroId)) {
+                return res.status(403).json({
+                  statusCode: 403,
+                  error: 'Forbidden',
+                  message: `No tienes permisos para crear horarios en la cancha con ID ${cancha.canchaId}`
+                });
+              }
             }
           }
           
@@ -135,15 +221,18 @@ function verificarPropiedadCanchasBulk(req, res, next) {
           }
           
           next();
-        })
-        .catch(error => {
+        } catch (error) {
           console.error('Error al verificar canchas:', error);
           return res.status(500).json({
             statusCode: 500,
             error: 'Internal Server Error',
             message: 'Error al verificar existencia de las canchas'
           });
-        });
+        }
+      };
+      
+      // Ejecutar la función asíncrona
+      verificarCanchas();
       
       return;
     }
@@ -187,6 +276,7 @@ function verificarPropiedadCanchaUpdate(req, res, next) {
     
     // Primero obtenemos el horario existente para verificar a qué cancha pertenece
     const horariosRepository = require('../../../infrastructure/repositories/horariosRepository');
+    const canchasRepository = new CanchasRepository();
     
     horariosRepository.getById(horarioId)
       .then(async horario => {
@@ -202,7 +292,6 @@ function verificarPropiedadCanchaUpdate(req, res, next) {
         if (userGroups.includes('super_admin') || userGroups.includes('admin_centro')) {
           if (req.body.canchaId && req.body.canchaId !== horario.canchaId) {
             // Si se está cambiando la cancha, verificar que la nueva exista
-            const canchasRepository = new CanchasRepository();
             
             canchasRepository.findById(req.body.canchaId)
               .then(cancha => {
@@ -233,8 +322,6 @@ function verificarPropiedadCanchaUpdate(req, res, next) {
         }
         
         // Para usuarios normales, verificar que la cancha le pertenezca
-        const canchasRepository = new CanchasRepository();
-        
         centroDeportivoRepository.findByAdminId(userId)
           .then(async centros => {
             if (!centros || centros.length === 0) {

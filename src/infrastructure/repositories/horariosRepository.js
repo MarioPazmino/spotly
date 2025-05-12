@@ -166,50 +166,9 @@ module.exports = {
     return await module.exports.create(horarioActualizado);
   },
 
-  /**
-   * Elimina todos los horarios de una cancha en un rango de fechas
-   */
-  async deleteByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin) {
-    // Primero obtenemos todos los horarios a eliminar
-    const horarios = await this.listByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin, 100);
-    
-    // Eliminamos cada horario individualmente
-    const eliminados = [];
-    for (const horario of horarios.items) {
-      try {
-        await this.delete(horario.horarioId);
-        eliminados.push(horario.horarioId);
-      } catch (error) {
-        console.error(`Error al eliminar horario ${horario.horarioId}:`, error);
-      }
-    }
-    
-    return {
-      eliminados,
-      total: eliminados.length
-    };
-  },
+  // Método deleteByCanchaAndRangoFechas eliminado porque no se usa en las rutas actuales
 
-  /**
-   * Actualiza varios horarios en una sola operación
-   */
-  async bulkUpdate(updatesArray) {
-    if (!Array.isArray(updatesArray) || updatesArray.length === 0) {
-      throw new Error('Se requiere un array de actualizaciones');
-    }
-    
-    const resultados = [];
-    for (const { horarioId, updates } of updatesArray) {
-      try {
-        const resultado = await this.update(horarioId, updates);
-        resultados.push({ horarioId, success: true, data: resultado });
-      } catch (error) {
-        resultados.push({ horarioId, success: false, error: error.message });
-      }
-    }
-    
-    return resultados;
-  },
+  // Método bulkUpdate eliminado porque no se usa en las rutas actuales
 
   /**
    * Elimina un horario por su ID

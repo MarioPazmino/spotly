@@ -20,5 +20,6 @@ function validateUUID(paramName) {
 }
 
 module.exports = {
-  validateUUID
+  validateUUID,
+  isUuid
 }; 

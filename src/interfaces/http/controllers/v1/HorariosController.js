@@ -1,23 +1,9 @@
-// src/interfaces/http/controllers/v1/HorariosController.js
+// src/interfaces/http/controllers/v1/horariosController.js
 // Implementación simplificada del servicio de horarios directamente en el controlador
 // para evitar problemas de importación en Lambda
 const horariosRepository = require('../../../../infrastructure/repositories/horariosRepository');
 const { normalizarFechaHoraGuayaquil, formatearHoraGuayaquil } = require('../../../../utils/fechas');
-
-// Función auxiliar para convertir una hora en formato HH:MM o HH:MM:SS a minutos desde medianoche
-function convertirHoraAMinutos(hora) {
-  if (!hora || typeof hora !== 'string') return 0;
-  
-  // Dividir la hora en partes (horas, minutos, segundos)
-  const partes = hora.split(':').map(Number);
-  
-  // Si tiene formato HH:MM:SS, ignoramos los segundos
-  // Si tiene formato HH:MM, solo usamos horas y minutos
-  const horas = partes[0] || 0;
-  const minutos = partes[1] || 0;
-  
-  return horas * 60 + minutos;
-}
+const { convertirHoraAMinutos } = require('../../../../utils/dateValidators');
 
 // Servicio simplificado de horarios
 class HorariosServiceSimple {
@@ -47,44 +33,51 @@ class HorariosServiceSimple {
     return this.repo.listByCanchaAndRangoFechas(canchaId, fecha, fecha, limit, exclusiveStartKey, estado);
   }
 
-
-
   async create(data) {
-    // Verificar si ya existe un horario que se solape con este nuevo horario
+    // Verificar campos requeridos sin incluir canchaId
     const { canchaId, fecha, horaInicio, horaFin } = data;
     
-    if (!canchaId || !fecha || !horaInicio || !horaFin) {
-      throw new Error('Se requieren los campos canchaId, fecha, horaInicio y horaFin');
+    if (!fecha || !horaInicio || !horaFin) {
+      throw new Error('Se requieren los campos fecha, horaInicio y horaFin');
     }
     
-    // Obtener todos los horarios de la cancha para la fecha específica
-    const horariosExistentes = await this.listByCanchaAndFecha(canchaId, fecha);
+    // Si falta canchaId, se debió asignar en el controlador
+    if (!canchaId) {
+      throw new Error('No se proporcionó el ID de la cancha (canchaId). Si tienes varias canchas, debes especificar para cuál quieres crear el horario.');
+    }
     
-    // Convertir las horas a minutos para facilitar la comparación
+    // Validar solapamiento con otros horarios
+    // Convertir horas a minutos para comparar
     const inicioNuevo = convertirHoraAMinutos(horaInicio);
     const finNuevo = convertirHoraAMinutos(horaFin);
     
-    // Verificar solapamientos
-    for (const horario of horariosExistentes.items) {
-      const inicioExistente = convertirHoraAMinutos(horario.horaInicio);
-      const finExistente = convertirHoraAMinutos(horario.horaFin);
-      
-      // Verificar si hay solapamiento
-      // Caso 1: El nuevo horario comienza durante un horario existente
-      // Caso 2: El nuevo horario termina durante un horario existente
-      // Caso 3: El nuevo horario contiene completamente un horario existente
-      // Caso 4: El nuevo horario está completamente contenido en un horario existente
-      if (
-        (inicioNuevo >= inicioExistente && inicioNuevo < finExistente) || // Caso 1
-        (finNuevo > inicioExistente && finNuevo <= finExistente) || // Caso 2
-        (inicioNuevo <= inicioExistente && finNuevo >= finExistente) || // Caso 3
-        (inicioNuevo >= inicioExistente && finNuevo <= finExistente) // Caso 4
-      ) {
-        throw new Error(`Ya existe un horario para la cancha ${canchaId} en la fecha ${fecha} que se solapa con el horario ${horaInicio}-${horaFin}`);
+    // Validar que horaInicio < horaFin
+    if (inicioNuevo >= finNuevo) {
+      throw new Error('La hora de inicio debe ser anterior a la hora de fin');
+    }
+    
+    // Obtener horarios existentes para esta fecha y cancha
+    const horariosExistentes = await this.listByCanchaAndFecha(canchaId, fecha);
+    
+    // Verificar solapamiento con horarios existentes
+    if (horariosExistentes && horariosExistentes.items && horariosExistentes.items.length > 0) {
+      for (const existente of horariosExistentes.items) {
+        const inicioExistente = convertirHoraAMinutos(existente.horaInicio);
+        const finExistente = convertirHoraAMinutos(existente.horaFin);
+        
+        // Comprobar solapamiento usando las 4 condiciones
+        if (
+          (inicioNuevo >= inicioExistente && inicioNuevo < finExistente) || // Caso 1: inicio nuevo dentro de horario existente
+          (finNuevo > inicioExistente && finNuevo <= finExistente) || // Caso 2: fin nuevo dentro de horario existente
+          (inicioNuevo <= inicioExistente && finNuevo >= finExistente) || // Caso 3: horario nuevo engloba al existente
+          (inicioNuevo >= inicioExistente && finNuevo <= finExistente) // Caso 4: horario nuevo contenido en existente
+        ) {
+          throw new Error(`Ya existe un horario para la cancha ${canchaId} en la fecha ${fecha} que se solapa con el horario ${horaInicio}-${horaFin} (${existente.horaInicio}-${existente.horaFin})`);
+        }
       }
     }
     
-    // Si no hay solapamientos, crear el horario
+    // Crear el horario
     return this.repo.create(data);
   }
 
@@ -100,10 +93,20 @@ class HorariosServiceSimple {
     // Primera pasada: agrupar horarios
     for (const horario of horarios) {
       const { canchaId, fecha } = horario;
-      if (!canchaId || !fecha) {
+      
+      // El canchaId debió ser asignado en el controlador si no venía
+      if (!canchaId) {
         errores.push({
           horario,
-          error: 'Se requieren los campos canchaId y fecha'
+          error: 'No se proporcionó el ID de la cancha (canchaId). Si tienes varias canchas, debes especificar para cuál quieres crear el horario.'
+        });
+        continue;
+      }
+      
+      if (!fecha) {
+        errores.push({
+          horario,
+          error: 'Se requiere el campo fecha'
         });
         continue;
       }
@@ -218,16 +221,7 @@ class HorariosServiceSimple {
     return { creados, duplicados, errores };
   }
 
-  async bulkUpdate(updates) {
-    // Implementación simplificada
-    const actualizados = [];
-    for (const update of updates) {
-      const { id, ...data } = update;
-      const updated = await this.repo.update(id, data);
-      actualizados.push(updated);
-    }
-    return actualizados;
-  }
+  // Método bulkUpdate eliminado porque no se usa en las rutas actuales
 
   async update(horarioId, data) {
     // Obtener el horario actual para validaciones
@@ -236,63 +230,70 @@ class HorariosServiceSimple {
       throw new Error(`Horario con ID ${horarioId} no encontrado`);
     }
     
-    // Ya no validamos reservas asociadas porque vamos a eliminar esa relación
+    // Eliminar campos que no deben actualizarse
+    const datosLimpios = { ...data };
+    delete datosLimpios.horarioId;
+    delete datosLimpios.canchaId;
     
-    // Si se están actualizando las horas, validar solapamientos
-    if (data.horaInicio || data.horaFin) {
+    // Si no hay datos para actualizar, retornar el horario sin cambios
+    if (Object.keys(datosLimpios).length === 0) {
+      return horarioActual;
+    }
+    
+    // Validar solapamiento si se están cambiando fechas u horas
+    if (datosLimpios.fecha || datosLimpios.horaInicio || datosLimpios.horaFin) {
+      const fecha = datosLimpios.fecha || horarioActual.fecha;
+      const horaInicio = datosLimpios.horaInicio || horarioActual.horaInicio;
+      const horaFin = datosLimpios.horaFin || horarioActual.horaFin;
+      const canchaId = horarioActual.canchaId;
       
-      // Combinar los datos actuales con los nuevos
-      const horarioActualizado = {
-        ...horarioActual,
-        ...data
-      };
+      // Validar que horaInicio < horaFin
+      if (horaInicio >= horaFin) {
+        throw new Error('La hora de inicio debe ser anterior a la hora de fin');
+      }
       
-      // Verificar solapamientos con otros horarios
-      const { canchaId, fecha, horaInicio, horaFin } = horarioActualizado;
-      
-      // Obtener todos los horarios de la cancha para la fecha específica
-      const horariosExistentes = await this.listByCanchaAndFecha(canchaId, fecha);
-      
-      // Convertir las horas a minutos para facilitar la comparación
+      // Convertir horas a minutos para comparar
       const inicioNuevo = convertirHoraAMinutos(horaInicio);
       const finNuevo = convertirHoraAMinutos(horaFin);
       
-      // Verificar solapamientos con otros horarios (excepto el que estamos actualizando)
-      for (const horario of horariosExistentes.items) {
-        // Saltar el horario que estamos actualizando
-        if (horario.horarioId === horarioId) continue;
-        
-        const inicioExistente = convertirHoraAMinutos(horario.horaInicio);
-        const finExistente = convertirHoraAMinutos(horario.horaFin);
-        
-        // Verificar si hay solapamiento
-        if (
-          (inicioNuevo >= inicioExistente && inicioNuevo < finExistente) || // Caso 1
-          (finNuevo > inicioExistente && finNuevo <= finExistente) || // Caso 2
-          (inicioNuevo <= inicioExistente && finNuevo >= finExistente) || // Caso 3
-          (inicioNuevo >= inicioExistente && finNuevo <= finExistente) // Caso 4
-        ) {
-          throw new Error(`Ya existe un horario para la cancha ${canchaId} en la fecha ${fecha} que se solapa con el horario ${horaInicio}-${horaFin}`);
+      // Obtener otros horarios existentes para la misma cancha y fecha
+      const horariosExistentes = await this.listByCanchaAndFecha(canchaId, fecha);
+      
+      // Verificar solapamiento con cada horario existente, excluyendo el actual
+      if (horariosExistentes && horariosExistentes.items) {
+        for (const existente of horariosExistentes.items) {
+          // Omitir el horario que estamos actualizando
+          if (existente.horarioId === horarioId) {
+            continue;
+          }
+          
+          const inicioExistente = convertirHoraAMinutos(existente.horaInicio);
+          const finExistente = convertirHoraAMinutos(existente.horaFin);
+          
+          // Comprobar solapamiento
+          if (
+            (inicioNuevo >= inicioExistente && inicioNuevo < finExistente) ||
+            (finNuevo > inicioExistente && finNuevo <= finExistente) ||
+            (inicioNuevo <= inicioExistente && finNuevo >= finExistente) ||
+            (inicioNuevo >= inicioExistente && finNuevo <= finExistente)
+          ) {
+            throw new Error(`El horario se solapa con un horario existente (${existente.horaInicio}-${existente.horaFin})`);
+          }
         }
       }
     }
     
-    // Si no hay solapamientos o no se están actualizando las horas, actualizar el horario
-    return this.repo.update(horarioId, data);
+    // Actualizar el horario con los datos limpios
+    return this.repo.update(horarioId, datosLimpios);
   }
 
   async delete(horarioId) {
     return this.repo.delete(horarioId);
   }
 
-  async deleteByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin) {
-    // Implementación simplificada
-    return 0;
-  }
+  // Método deleteByCanchaAndRangoFechas eliminado porque no se usa en las rutas actuales
 
-  async getByFechaAndCancha(fecha, canchaId) {
-    return this.repo.getByFechaAndCancha(fecha, canchaId);
-  }
+  // Método getByFechaAndCancha eliminado porque no se usa en las rutas actuales
 }
 
 // Crear una instancia del servicio simplificado
@@ -330,17 +331,27 @@ class HorariosController {
   async bulkCreate(req, res, next) {
     try {
       const horarios = req.body.horarios;
+      
       if (!Array.isArray(horarios) || horarios.length === 0) {
         return res.status(400).json({ error: 'Debe enviar un array de horarios' });
       }
+      
       // Validar formato y consistencia de cada horario
       const errores = [];
       for (let i = 0; i < horarios.length; i++) {
         const h = horarios[i];
+        
+        // Verificar que cada horario tiene canchaId (el middleware debería haberlo asignado)
+        if (!h.canchaId) {
+          errores.push({ idx: i, error: 'Falta canchaId para este horario' });
+          continue;
+        }
+        
         if (!h.horaInicio || !h.horaFin) {
           errores.push({ idx: i, error: 'Faltan horaInicio u horaFin' });
           continue;
         }
+        
         // Validar formato de hora: aceptar tanto HH:mm como HH:mm:ss
         const regexHoraConSegundos = /^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/;
         const regexHoraSinSegundos = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -352,13 +363,16 @@ class HorariosController {
           errores.push({ idx: i, error: 'Formato de hora inválido (debe ser HH:mm o HH:mm:ss)' });
           continue;
         }
+        
         if (h.horaInicio >= h.horaFin) {
           errores.push({ idx: i, error: 'horaInicio debe ser menor que horaFin' });
         }
       }
+      
       if (errores.length > 0) {
         return res.status(400).json({ error: 'Errores de validación en horarios', detalles: errores });
       }
+      
       // El service ahora retorna {creados, duplicados, errores}
       const { creados, duplicados, errores: erroresServicio } = await this.horariosService.bulkCreate(horarios);
       
@@ -394,33 +408,9 @@ class HorariosController {
     }
   }
 
-  // PATCH /api/v1/horarios/bulk
-  async bulkUpdate(req, res, next) {
-    try {
-      const updates = req.body.updates;
-      if (!Array.isArray(updates) || updates.length === 0) {
-        return res.status(400).json({ error: 'Debe enviar un array de actualizaciones' });
-      }
-      const actualizados = await this.horariosService.bulkUpdate(updates);
-      res.status(200).json({ actualizados });
-    } catch (err) {
-      next(err);
-    }
-  }
+  // Método bulkUpdate eliminado porque no se usa en las rutas actuales
 
-  // DELETE /api/v1/horarios/rango-fechas?canchaId=...&fechaInicio=...&fechaFin=...
-  async deleteByCanchaAndRangoFechas(req, res, next) {
-    try {
-      const { canchaId, fechaInicio, fechaFin } = req.query;
-      if (!canchaId || !fechaInicio || !fechaFin) {
-        return res.status(400).json({ error: 'canchaId, fechaInicio y fechaFin son requeridos' });
-      }
-      const eliminados = await this.horariosService.deleteByCanchaAndRangoFechas(canchaId, fechaInicio, fechaFin);
-      res.status(200).json({ eliminados });
-    } catch (err) {
-      next(err);
-    }
-  }
+  // Método deleteByCanchaAndRangoFechas eliminado porque no se usa en las rutas actuales
 
   // GET /api/v1/horarios/:id
   async getById(req, res, next) {
@@ -451,27 +441,95 @@ class HorariosController {
     }
   }
 
-
-
   // POST /api/v1/horarios
   async create(req, res, next) {
     try {
-      const horario = await this.horariosService.create(req.body);
-      res.status(201).json(horario);
-    } catch (err) { 
-      // Verificar si es un error de solapamiento
-      if (err.message && err.message.includes('solapa')) {
-        return res.status(409).json({
-          error: 'Error de solapamiento de horarios',
-          mensaje: 'No se pudo crear el horario debido a un solapamiento con otro horario existente',
-          detalles: {
-            horario: `${req.body.fecha} ${req.body.horaInicio}-${req.body.horaFin}`,
-            error: err.message
-          },
-          code: 'HORARIO_SOLAPADO'
+      const data = req.body;
+      
+      // El middleware validarHorario ya debería haber verificado y asignado un canchaId válido
+      if (!data.canchaId) {
+        // Este caso solo debería ocurrir si hay algún problema con el middleware
+        // Intentar proporcionar información útil al usuario
+        
+        const userId = req.user.sub || req.user.userId;
+        const CanchasRepository = require('../../../../infrastructure/repositories/canchasRepository');
+        const canchasRepository = new CanchasRepository();
+        const centroDeportivoRepository = require('../../../../infrastructure/repositories/centroDeportivoRepository');
+        
+        try {
+          // Buscar los centros del usuario
+          const centros = await centroDeportivoRepository.findByAdminId(userId);
+          
+          if (!centros || centros.length === 0) {
+            return res.status(400).json({
+              error: 'Bad Request',
+              mensaje: 'No se pudo determinar el canchaId. No tienes centros deportivos asociados.'
+            });
+          }
+          
+          // Buscar canchas para todos los centros
+          let todasLasCanchas = [];
+          for (const centro of centros) {
+            const resultadoCanchas = await canchasRepository.findAllByCentro(centro.centroId);
+            if (resultadoCanchas && resultadoCanchas.items && resultadoCanchas.items.length > 0) {
+              todasLasCanchas = [...todasLasCanchas, ...resultadoCanchas.items];
+            }
+          }
+          
+          if (todasLasCanchas.length === 0) {
+            return res.status(400).json({
+              error: 'Bad Request',
+              mensaje: 'No se pudo determinar el canchaId. No tienes canchas asociadas a tus centros deportivos.'
+            });
+          }
+          
+          // Si hay una sola cancha, usarla automáticamente
+          if (todasLasCanchas.length === 1) {
+            data.canchaId = todasLasCanchas[0].canchaId;
+          } else {
+            // Mostrar las canchas disponibles
+            return res.status(400).json({
+              error: 'Bad Request',
+              mensaje: 'No se pudo determinar el canchaId. Tienes múltiples canchas disponibles, debes especificar cuál quieres usar.',
+              canchasDisponibles: todasLasCanchas.map(c => ({
+                canchaId: c.canchaId,
+                nombre: c.nombre || c.tipo,
+                tipo: c.tipo,
+                centroId: c.centroId
+              }))
+            });
+          }
+        } catch (error) {
+          console.error('Error al buscar canchas del usuario:', error);
+          return res.status(400).json({
+            error: 'Bad Request',
+            mensaje: 'No se pudo determinar el canchaId. Contacte al administrador.'
+          });
+        }
+      }
+      
+      try {
+        // Crear el horario utilizando el servicio
+        const horario = await this.horariosService.create(data);
+        res.status(201).json(horario);
+      } catch (serviceError) {
+        // Capturar específicamente errores de solapamiento
+        if (serviceError.message && serviceError.message.includes('solapa')) {
+          return res.status(409).json({
+            error: 'Conflicto de horarios',
+            mensaje: serviceError.message,
+            code: 'HORARIO_OVERLAP'
+          });
+        }
+        // Otros errores del servicio
+        return res.status(400).json({
+          error: 'Error al crear horario',
+          mensaje: serviceError.message
         });
       }
-      next(err); 
+    } catch (error) {
+      console.error('Error al crear horario:', error);
+      next(error);
     }
   }
 
@@ -479,8 +537,6 @@ class HorariosController {
   async update(req, res, next) {
     try {
       console.log('PATCH /api/v1/horarios/:id - Cuerpo de la solicitud:', JSON.stringify(req.body));
-      console.log('PATCH /api/v1/horarios/:id - Método HTTP:', req.method);
-      console.log('PATCH /api/v1/horarios/:id - Headers:', JSON.stringify(req.headers));
       
       // Procesar el cuerpo de la solicitud si es un Buffer
       let datosActualizacion = req.body;
@@ -523,58 +579,34 @@ class HorariosController {
         });
       }
       
-      // Si se están actualizando las horas, validar que horaInicio < horaFin
-      if (datosActualizacion.horaInicio || datosActualizacion.horaFin) {
-        // Obtener el horario actual para completar los datos que faltan
-        const horarioActual = await this.horariosService.getById(req.params.id);
-        if (!horarioActual) {
-          return res.status(404).json({
-            error: 'Horario no encontrado',
-            mensaje: `No se encontró el horario con ID ${req.params.id}`
-          });
-        }
-        
-        // Determinar las horas a comparar (las nuevas o las existentes)
-        const horaInicio = datosActualizacion.horaInicio || horarioActual.horaInicio;
-        const horaFin = datosActualizacion.horaFin || horarioActual.horaFin;
-        
-        // Convertir a minutos para comparar
-        const inicioMinutos = convertirHoraAMinutos(horaInicio);
-        const finMinutos = convertirHoraAMinutos(horaFin);
-        
-        if (inicioMinutos >= finMinutos) {
-          return res.status(400).json({
-            error: 'Validación de horario fallida',
-            mensaje: 'La hora de inicio debe ser menor que la hora de fin',
-            detalles: {
-              horaInicio,
-              horaFin
-            }
-          });
-        }
-      }
+      // Eliminar campos que no deben actualizarse
+      delete datosActualizacion.horarioId;
+      delete datosActualizacion.canchaId;
       
       console.log('Datos finales para actualizar:', JSON.stringify(datosActualizacion));
-      const horario = await this.horariosService.update(req.params.id, datosActualizacion);
-      console.log('Horario actualizado:', JSON.stringify(horario));
-      res.json(horario);
-    } catch (err) {
-      console.error('Error al actualizar horario:', err.message); 
-      // Verificar si es un error de solapamiento
-      if (err.message && err.message.includes('solapa')) {
-        return res.status(409).json({
-          error: 'Error de solapamiento de horarios',
-          mensaje: 'No se pudo actualizar el horario debido a un solapamiento con otro horario existente',
-          detalles: {
-            horarioId: req.params.id,
-            error: err.message
-          },
-          code: 'HORARIO_SOLAPADO'
+      
+      try {
+        const horario = await this.horariosService.update(req.params.id, datosActualizacion);
+        console.log('Horario actualizado:', JSON.stringify(horario));
+        res.json(horario);
+      } catch (serviceError) {
+        // Capturar específicamente errores de solapamiento
+        if (serviceError.message && serviceError.message.includes('solapa')) {
+          return res.status(409).json({
+            error: 'Conflicto de horarios',
+            mensaje: serviceError.message,
+            code: 'HORARIO_OVERLAP'
+          });
+        }
+        // Otros errores del servicio
+        return res.status(400).json({
+          error: 'Error al actualizar horario',
+          mensaje: serviceError.message
         });
       }
-      
-      // Ya no manejamos errores relacionados con reservas
-      next(err); 
+    } catch (err) {
+      console.error('Error al actualizar horario:', err.message); 
+      next(err);
     }
   }
 
