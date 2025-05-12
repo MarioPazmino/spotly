@@ -4,6 +4,26 @@ const Boom = require('@hapi/boom');
 const cuponDescuentoService = require('../services/cuponDescuentoService');
 const CuponesDescuento = require('../../domain/entities/cupon-descuento');
 const { sanitizeObject } = require('../../utils/sanitizeInput');
+const canchasRepository = new (require('../repositories/canchasRepository'))();
+const horariosRepository = require('../repositories/horariosRepository');
+
+// Función auxiliar para convertir formato de hora (HH:MM) a minutos totales
+function parseHoraToMinutes(hora) {
+  if (!hora) return 0;
+  
+  // Si es un string en formato HH:MM
+  if (typeof hora === 'string' && hora.includes(':')) {
+    const [horas, minutos] = hora.split(':').map(Number);
+    return horas * 60 + minutos;
+  }
+  
+  // Si es un número, asumir que son horas
+  if (typeof hora === 'number') {
+    return hora * 60;
+  }
+  
+  return 0;
+}
 
 class ReservaService {
   async crearReserva(data) {
@@ -27,6 +47,41 @@ class ReservaService {
         throw Boom.badRequest('La duración máxima de la reserva es 12 horas.');
       }
     }
+
+    // Calcular el total de la reserva basado en el precio de la cancha y la cantidad de horarios
+    if (!data.total && data.canchaId && data.horarioIds && data.horarioIds.length > 0) {
+      // Obtener la información de la cancha
+      const cancha = await canchasRepository.findById(data.canchaId);
+      if (!cancha) {
+        throw Boom.notFound(`La cancha con ID ${data.canchaId} no existe.`);
+      }
+
+      // Verificar que la cancha tenga un precio por hora definido
+      if (!cancha.precioPorHora || isNaN(cancha.precioPorHora)) {
+        throw Boom.badData(`La cancha con ID ${data.canchaId} no tiene un precio por hora válido.`);
+      }
+
+      // Obtener los horarios para calcular la duración total
+      let duracionTotalHoras = 0;
+      for (const horarioId of data.horarioIds) {
+        const horario = await horariosRepository.getById(horarioId);
+        if (!horario) {
+          throw Boom.notFound(`El horario ${horarioId} no existe.`);
+        }
+        
+        // Calcular duración del horario en horas
+        const horaInicio = parseHoraToMinutes(horario.horaInicio);
+        const horaFin = parseHoraToMinutes(horario.horaFin);
+        const duracionMinutos = horaFin - horaInicio;
+        const duracionHoras = duracionMinutos / 60;
+        
+        duracionTotalHoras += duracionHoras;
+      }
+      
+      // Calcular el total basado en la duración total en horas
+      data.total = cancha.precioPorHora * duracionTotalHoras;
+    }
+
     if (data.codigoPromoAplicado) {
       const cupon = await cuponDescuentoService.findByCodigo(data.codigoPromoAplicado);
       if (!cupon) {
@@ -90,7 +145,67 @@ class ReservaService {
     return { items, lastKey: result.lastKey };
   }
 
-  actualizarReserva(id, data) {
+  async actualizarReserva(id, data) {
+    // Si se están modificando los horarios, recalcular el total
+    if (data.horarioIds && Array.isArray(data.horarioIds)) {
+      // Obtener la reserva actual para ver si cambiaron los horarios
+      const reservaActual = await reservaRepository.obtenerReservaPorId(id);
+      
+      // Verificar si el array de horarios ha cambiado
+      const horariosCambiados = !reservaActual.horarioIds || 
+                               reservaActual.horarioIds.length !== data.horarioIds.length || 
+                               !reservaActual.horarioIds.every(h => data.horarioIds.includes(h));
+      
+      // Si cambiaron los horarios o se modificó la cancha, recalcular el total
+      if (horariosCambiados || data.canchaId) {
+        // Determinar la cancha a usar (la nueva si se está cambiando, o la actual si no)
+        const canchaId = data.canchaId || reservaActual.canchaId;
+        
+        // Obtener información de la cancha
+        const cancha = await canchasRepository.findById(canchaId);
+        if (!cancha) {
+          throw Boom.notFound(`La cancha con ID ${canchaId} no existe.`);
+        }
+        
+        // Verificar que la cancha tenga un precio por hora definido
+        if (!cancha.precioPorHora || isNaN(cancha.precioPorHora)) {
+          throw Boom.badData(`La cancha con ID ${canchaId} no tiene un precio por hora válido.`);
+        }
+        
+        // Obtener los horarios para calcular la duración total
+        let duracionTotalHoras = 0;
+        for (const horarioId of data.horarioIds) {
+          const horario = await horariosRepository.getById(horarioId);
+          if (!horario) {
+            throw Boom.notFound(`El horario ${horarioId} no existe.`);
+          }
+          
+          // Calcular duración del horario en horas
+          const horaInicio = parseHoraToMinutes(horario.horaInicio);
+          const horaFin = parseHoraToMinutes(horario.horaFin);
+          const duracionMinutos = horaFin - horaInicio;
+          const duracionHoras = duracionMinutos / 60;
+          
+          duracionTotalHoras += duracionHoras;
+        }
+        
+        // Calcular el total basado en la duración total en horas
+        data.total = cancha.precioPorHora * duracionTotalHoras;
+        
+        // Si hay un cupón aplicado, recalcular el descuento
+        if (reservaActual.codigoPromoAplicado || data.codigoPromoAplicado) {
+          const codigoPromo = data.codigoPromoAplicado || reservaActual.codigoPromoAplicado;
+          const cupon = await cuponDescuentoService.findByCodigo(codigoPromo);
+          
+          if (cupon) {
+            let cuponEntidad = cupon instanceof CuponesDescuento ? cupon : new CuponesDescuento(cupon);
+            data.descuentoAplicado = cuponEntidad.calcularDescuento(data.total);
+            data.total = Math.max(0, data.total - data.descuentoAplicado);
+          }
+        }
+      }
+    }
+    
     return reservaRepository.actualizarReserva(id, data);
   }
 

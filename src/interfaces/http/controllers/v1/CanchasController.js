@@ -9,7 +9,6 @@ const { checkCentroOwnership, checkCanchaPermission } = require('../../../middle
 exports.createCancha = async (req, res, next) => {
   try {
     const userId = req.user.sub || req.user.userId;
-    const centroId = req.body.centroId;
     
     // Obtener los grupos del usuario
     const userGroups = req.user.groups || req.user['cognito:groups'] || [];
@@ -17,8 +16,44 @@ exports.createCancha = async (req, res, next) => {
     // Registrar información para depuración
     console.log(`Verificando permisos para crear cancha. Usuario: ${userId}, Grupos: ${JSON.stringify(userGroups)}`);
     
-    // Verificar permisos pasando los grupos del usuario
-    await checkCentroOwnership(userId, centroId, userGroups);
+    // Importar el repositorio de centros deportivos
+    const centroRepository = require('../../../../infrastructure/repositories/centroDeportivoRepository');
+    
+    // Buscar centros deportivos donde el usuario es administrador
+    const centros = await centroRepository.findByAdminId(userId);
+    
+    if (!centros || centros.length === 0) {
+      return res.status(403).json({
+        statusCode: 403,
+        error: 'Forbidden',
+        message: 'No tienes ningún centro deportivo asociado. Debes crear un centro deportivo primero.'
+      });
+    }
+    
+    // Siempre ignoramos el centroId proporcionado por el usuario y usamos el centro asociado
+    // Para usuarios normales, solo tendrán uno; para admins, usamos el primero si no se especifica
+    
+    // Si el usuario envió un centroId, verificamos que sea uno de sus centros
+    let centroId = req.body.centroId;
+    
+    if (centroId) {
+      // Verificar que el centroId proporcionado pertenezca al usuario
+      const centroPertenece = centros.some(centro => centro.centroId === centroId);
+      if (!centroPertenece) {
+        return res.status(403).json({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: 'No tienes permiso para crear canchas en este centro deportivo.'
+        });
+      }
+    } else {
+      // Si no se especificó un centroId, usamos el primer centro del usuario
+      centroId = centros[0].centroId;
+      console.log(`Usuario ${userId} no especificó centroId, usando su centro por defecto: ${centroId}`);
+    }
+    
+    // Asegurarse de que el centroId esté en el cuerpo de la solicitud antes de crear la cancha
+    req.body.centroId = centroId;
     
     const cancha = await canchasService.createCancha(req.body);
     return res.status(201).json(cancha);

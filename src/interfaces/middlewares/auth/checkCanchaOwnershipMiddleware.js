@@ -37,7 +37,7 @@ async function checkCentroOwnership(userId, centroId, userGroups = []) {
   }
   
   // Verificar si el usuario es el administrador del centro (para otros roles)
-  if (centro.adminId !== userId) {
+  if (centro.userId !== userId) {
     throw Boom.forbidden('No tienes permiso para realizar esta acción en este centro deportivo');
   }
 

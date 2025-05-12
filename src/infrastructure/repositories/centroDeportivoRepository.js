@@ -236,6 +236,55 @@ class CentroDeportivoRepository {
       return 0;
     });
   }
+
+  /**
+   * Busca centros deportivos administrados por un usuario específico
+   * @param {string} adminId - ID del administrador
+   * @returns {Promise<Array>} - Lista de centros deportivos
+   */
+  async findByAdminId(adminId) {
+    if (!adminId) {
+      throw new Error('Se requiere el ID del administrador');
+    }
+    
+    console.log(`Buscando centros deportivos para userId: ${adminId}`);
+    
+    // Usar el índice UserIdIndex definido en serverless.yml
+    const params = {
+      TableName: this.tableName,
+      IndexName: 'UserIdIndex',
+      KeyConditionExpression: 'userId = :userId',
+      ExpressionAttributeValues: {
+        ':userId': adminId
+      }
+    };
+    
+    try {
+      console.log('Ejecutando query con UserIdIndex');
+      const result = await this.docClient.send(new QueryCommand(params));
+      return result.Items.map(item => new CentroDeportivo(item));
+    } catch (error) {
+      console.error(`Error al buscar centros deportivos para usuario ${adminId}:`, error);
+      
+      // Si hay algún problema con el índice, caer en modo scan como respaldo
+      if (error.name === 'ResourceNotFoundException' || error.code === 'ValidationException') {
+        console.warn('Problema con índice UserIdIndex, usando scan como alternativa');
+        
+        const scanParams = {
+          TableName: this.tableName,
+          FilterExpression: 'userId = :userId',
+          ExpressionAttributeValues: {
+            ':userId': adminId
+          }
+        };
+        
+        const scanResult = await this.docClient.send(new ScanCommand(scanParams));
+        return scanResult.Items.map(item => new CentroDeportivo(item));
+      }
+      
+      throw error;
+    }
+  }
 }
 
 module.exports = new CentroDeportivoRepository();
