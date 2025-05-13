@@ -5,7 +5,7 @@
  */
 const canchasService = require('../../../../../infrastructure/services/canchasService');
 const CanchaImagenService = require('../../../../../infrastructure/services/canchas/canchaImagenService');
-const CanchasRepository = require('../../../../../infrastructure/repositories/canchasRepository');
+const canchasRepository = require('../../../../../infrastructure/repositories/canchasRepository');
 const Boom = require('@hapi/boom');
 const { sanitizeString } = require('../../../../../utils/sanitizeInput');
 
@@ -17,7 +17,7 @@ let canchaImagenService;
 
 // Intentar crear la instancia del servicio de imágenes
 try {
-  canchaImagenService = new CanchaImagenService(new CanchasRepository());
+  canchaImagenService = new CanchaImagenService(canchasRepository);
   console.log('Servicio de imágenes de canchas inicializado correctamente');
 } catch (error) {
   console.error('Error al inicializar el servicio de imágenes de canchas:', error.message);

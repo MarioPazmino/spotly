@@ -4,7 +4,7 @@ const Boom = require('@hapi/boom');
 const cuponDescuentoService = require('../services/cuponDescuentoService');
 const CuponesDescuento = require('../../domain/entities/cupon-descuento');
 const { sanitizeObject } = require('../../utils/sanitizeInput');
-const canchasRepository = new (require('../repositories/canchasRepository'))();
+const canchasRepository = require('../repositories/canchasRepository');
 const horariosRepository = require('../repositories/horariosRepository');
 
 // Función auxiliar para convertir formato de hora (HH:MM) a minutos totales
@@ -61,12 +61,20 @@ class ReservaService {
         throw Boom.badData(`La cancha con ID ${data.canchaId} no tiene un precio por hora válido.`);
       }
 
-      // Obtener los horarios para calcular la duración total
+      // Obtener los horarios para calcular la duración total y validar que pertenezcan a la cancha
       let duracionTotalHoras = 0;
+      const horariosNoPertenecientes = [];
+      
       for (const horarioId of data.horarioIds) {
         const horario = await horariosRepository.getById(horarioId);
         if (!horario) {
           throw Boom.notFound(`El horario ${horarioId} no existe.`);
+        }
+        
+        // Verificar que el horario pertenezca a la cancha seleccionada
+        if (horario.canchaId !== data.canchaId) {
+          horariosNoPertenecientes.push(horarioId);
+          continue; // Saltamos este horario para no incluirlo en el cálculo
         }
         
         // Calcular duración del horario en horas
@@ -78,6 +86,11 @@ class ReservaService {
         duracionTotalHoras += duracionHoras;
       }
       
+      // Si hay horarios que no pertenecen a la cancha, lanzar error
+      if (horariosNoPertenecientes.length > 0) {
+        throw Boom.badRequest(`Los siguientes horarios no pertenecen a la cancha seleccionada: ${horariosNoPertenecientes.join(', ')}`);
+      }
+      
       // Calcular el total basado en la duración total en horas
       data.total = cancha.precioPorHora * duracionTotalHoras;
     }
@@ -87,6 +100,17 @@ class ReservaService {
       if (!cupon) {
         throw Boom.badRequest('El cupón no existe.');
       }
+      
+      // Validar que el cupón pertenezca al mismo centro deportivo que la cancha
+      const cancha = await canchasRepository.findById(data.canchaId);
+      if (!cancha) {
+        throw Boom.notFound(`La cancha con ID ${data.canchaId} no existe.`);
+      }
+      
+      if (cupon.centroId !== cancha.centroId) {
+        throw Boom.badRequest(`El cupón ${data.codigoPromoAplicado} no es válido para esta cancha. Pertenece a otro centro deportivo.`);
+      }
+      
       // Validar vigencia por fechas
       const ahora = new Date();
       const inicio = new Date(cupon.fechaInicio);
@@ -145,69 +169,6 @@ class ReservaService {
     return { items, lastKey: result.lastKey };
   }
 
-  async actualizarReserva(id, data) {
-    // Si se están modificando los horarios, recalcular el total
-    if (data.horarioIds && Array.isArray(data.horarioIds)) {
-      // Obtener la reserva actual para ver si cambiaron los horarios
-      const reservaActual = await reservaRepository.obtenerReservaPorId(id);
-      
-      // Verificar si el array de horarios ha cambiado
-      const horariosCambiados = !reservaActual.horarioIds || 
-                               reservaActual.horarioIds.length !== data.horarioIds.length || 
-                               !reservaActual.horarioIds.every(h => data.horarioIds.includes(h));
-      
-      // Si cambiaron los horarios o se modificó la cancha, recalcular el total
-      if (horariosCambiados || data.canchaId) {
-        // Determinar la cancha a usar (la nueva si se está cambiando, o la actual si no)
-        const canchaId = data.canchaId || reservaActual.canchaId;
-        
-        // Obtener información de la cancha
-        const cancha = await canchasRepository.findById(canchaId);
-        if (!cancha) {
-          throw Boom.notFound(`La cancha con ID ${canchaId} no existe.`);
-        }
-        
-        // Verificar que la cancha tenga un precio por hora definido
-        if (!cancha.precioPorHora || isNaN(cancha.precioPorHora)) {
-          throw Boom.badData(`La cancha con ID ${canchaId} no tiene un precio por hora válido.`);
-        }
-        
-        // Obtener los horarios para calcular la duración total
-        let duracionTotalHoras = 0;
-        for (const horarioId of data.horarioIds) {
-          const horario = await horariosRepository.getById(horarioId);
-          if (!horario) {
-            throw Boom.notFound(`El horario ${horarioId} no existe.`);
-          }
-          
-          // Calcular duración del horario en horas
-          const horaInicio = parseHoraToMinutes(horario.horaInicio);
-          const horaFin = parseHoraToMinutes(horario.horaFin);
-          const duracionMinutos = horaFin - horaInicio;
-          const duracionHoras = duracionMinutos / 60;
-          
-          duracionTotalHoras += duracionHoras;
-        }
-        
-        // Calcular el total basado en la duración total en horas
-        data.total = cancha.precioPorHora * duracionTotalHoras;
-        
-        // Si hay un cupón aplicado, recalcular el descuento
-        if (reservaActual.codigoPromoAplicado || data.codigoPromoAplicado) {
-          const codigoPromo = data.codigoPromoAplicado || reservaActual.codigoPromoAplicado;
-          const cupon = await cuponDescuentoService.findByCodigo(codigoPromo);
-          
-          if (cupon) {
-            let cuponEntidad = cupon instanceof CuponesDescuento ? cupon : new CuponesDescuento(cupon);
-            data.descuentoAplicado = cuponEntidad.calcularDescuento(data.total);
-            data.total = Math.max(0, data.total - data.descuentoAplicado);
-          }
-        }
-      }
-    }
-    
-    return reservaRepository.actualizarReserva(id, data);
-  }
 
   eliminarReserva(id) {
     return reservaRepository.eliminarReserva(id);

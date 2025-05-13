@@ -1,4 +1,4 @@
-const CanchasRepository = require('../../../infrastructure/repositories/canchasRepository');
+const canchasRepository = require('../../../infrastructure/repositories/canchasRepository');
 const centroDeportivoRepository = require('../../../infrastructure/repositories/centroDeportivoRepository');
 
 /**
@@ -10,7 +10,7 @@ function verificarPropiedadCanchasBulk(req, res, next) {
     const userGroups = req.user.groups || req.user['cognito:groups'] || [];
     
     // Instanciar repositorios
-    const canchasRepository = new CanchasRepository();
+    // Usar la instancia ya creada del repositorio (patrón Singleton)
     
     // Verificar que se proporcionaron horarios
     if (!req.body.horarios || !Array.isArray(req.body.horarios) || req.body.horarios.length === 0) {
@@ -151,7 +151,7 @@ function verificarPropiedadCanchasBulk(req, res, next) {
       const verificarCanchas = async () => {
         try {
           // Crear instancias de los repositorios
-          const canchasRepository = new CanchasRepository();
+          // Usar la instancia ya creada del repositorio (patrón Singleton)
           
           // Obtener todas las canchas especificadas
           const canchasEncontradas = await Promise.all(canchaIds.map(id => canchasRepository.findById(id)));
@@ -276,7 +276,7 @@ function verificarPropiedadCanchaUpdate(req, res, next) {
     
     // Primero obtenemos el horario existente para verificar a qué cancha pertenece
     const horariosRepository = require('../../../infrastructure/repositories/horariosRepository');
-    const canchasRepository = new CanchasRepository();
+    // Usar la instancia ya creada del repositorio (patrón Singleton)
     
     horariosRepository.getById(horarioId)
       .then(async horario => {

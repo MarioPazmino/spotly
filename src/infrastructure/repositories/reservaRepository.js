@@ -15,7 +15,7 @@ class ReservaRepository {
   async crearReserva(data) {
     // Validar cupón si se aplica
     if (data.codigoPromoAplicado) {
-      const cuponRepo = new CuponDescuentoRepository();
+      const cuponRepo = CuponDescuentoRepository;
       const cupon = await cuponRepo.findByCodigo(data.codigoPromoAplicado);
       if (!cupon) {
         throw Boom.notFound('El cupón no existe.');
@@ -29,7 +29,7 @@ class ReservaRepository {
     }
 
     // Validar que los horarioIds no estén ocupados
-    const horariosRepository = new HorariosRepository();
+    const horariosRepository = require('../repositories/horariosRepository');
     if (!Array.isArray(data.horarioIds) || data.horarioIds.length === 0) {
       throw Boom.badRequest('La reserva debe incluir al menos un horario.');
     }
@@ -61,10 +61,62 @@ class ReservaRepository {
     
     // Guardar en DynamoDB
     try {
+      // Primero guardamos la reserva
       await this.dynamoDb.put({
         TableName: this.tableName,
         Item: reserva
       }).promise();
+      
+      // Después actualizamos el estado de los horarios a 'Reservado'
+      const horariosRepository = require('../repositories/horariosRepository');
+      console.log(`Actualizando estado de ${data.horarioIds.length} horarios a 'Reservado' para reserva ${reservaId}`);
+      
+      let horariosActualizados = 0;
+      let erroresActualizacion = [];
+      
+      for (const horarioId of data.horarioIds) {
+        try {
+          // Verificar que el horario exista y esté disponible
+          const horario = await horariosRepository.getById(horarioId);
+          if (!horario) {
+            throw new Error(`El horario ${horarioId} no existe`);
+          }
+          
+          if (horario.estado !== 'Disponible') {
+            throw new Error(`El horario ${horarioId} no está disponible (estado actual: ${horario.estado})`);
+          }
+          
+          // Actualizar el estado del horario y asociarlo con esta reserva
+          await horariosRepository.update(horarioId, {
+            estado: 'Reservado',
+            reservaId: reservaId,
+            updatedAt: new Date().toISOString()
+          });
+          
+          // Verificar que se haya actualizado correctamente
+          const horarioActualizado = await horariosRepository.getById(horarioId);
+          if (horarioActualizado.estado !== 'Reservado' || horarioActualizado.reservaId !== reservaId) {
+            throw new Error(`El horario ${horarioId} no se actualizó correctamente. Estado: ${horarioActualizado.estado}, ReservaId: ${horarioActualizado.reservaId}`);
+          }
+          
+          console.log(`Horario ${horarioId} actualizado exitosamente a estado 'Reservado' para reserva ${reservaId}`);
+          horariosActualizados++;
+        } catch (horarioError) {
+          console.error(`Error al actualizar el horario ${horarioId}:`, horarioError.message);
+          erroresActualizacion.push({
+            horarioId,
+            error: horarioError.message
+          });
+          // Continuamos con los demás horarios aunque falle uno
+        }
+      }
+      
+      console.log(`Actualización de horarios completada: ${horariosActualizados}/${data.horarioIds.length} actualizados correctamente`);
+      
+      // Si hay errores pero algunos horarios se actualizaron, continuamos pero registramos los errores
+      if (erroresActualizacion.length > 0) {
+        console.warn(`Se encontraron ${erroresActualizacion.length} errores al actualizar horarios:`, JSON.stringify(erroresActualizacion));
+      }
       
       return reserva;
     } catch (error) {
@@ -92,145 +144,131 @@ class ReservaRepository {
     }
   }
 
-  async obtenerReservasPorUsuario(userId) {
-    const params = {
-      TableName: this.tableName,
-      IndexName: 'UserIdIndex', // Asumiendo que existe un índice secundario para userId
-      KeyConditionExpression: 'userId = :userId',
-      ExpressionAttributeValues: {
-        ':userId': userId
-      }
-    };
-
+  async obtenerReservasPorUsuario(userId, options = {}) {
     try {
-      const resultado = await this.dynamoDb.query(params).promise();
-      return resultado.Items.map(item => new Reserva(item));
+      // Intenta usar el índice UserIdIndex si existe
+      try {
+        const indexParams = {
+          TableName: this.tableName,
+          IndexName: 'UserIdIndex', // Nombre del GSI que debería existir
+          KeyConditionExpression: 'userId = :userId',
+          ExpressionAttributeValues: {
+            ':userId': userId
+          }
+        };
+
+        if (options.limit) {
+          indexParams.Limit = options.limit;
+        }
+
+        if (options.lastKey) {
+          indexParams.ExclusiveStartKey = options.lastKey;
+        }
+
+        console.log(`Buscando reservas para el usuario: ${userId} usando índice UserIdIndex`);
+        const indexResult = await this.dynamoDb.query(indexParams).promise();
+        console.log(`Reservas encontradas con índice: ${indexResult.Items ? indexResult.Items.length : 0}`);
+        return {
+          items: indexResult.Items || [],
+          lastKey: indexResult.LastEvaluatedKey
+        };
+      } catch (indexError) {
+        // Si el índice no existe o hay otro error, fallback a scan
+        console.warn(`No se pudo usar el índice UserIdIndex: ${indexError.message}. Usando scan como alternativa.`);
+        
+        // Fallback a scan con filter
+        const scanParams = {
+          TableName: this.tableName,
+          FilterExpression: 'userId = :userId',
+          ExpressionAttributeValues: {
+            ':userId': userId
+          }
+        };
+
+        if (options.limit) {
+          scanParams.Limit = options.limit;
+        }
+
+        if (options.lastKey) {
+          scanParams.ExclusiveStartKey = options.lastKey;
+        }
+
+        console.log(`Fallback: Buscando reservas para el usuario: ${userId} usando scan con filtro`);
+        const result = await this.dynamoDb.scan(scanParams).promise();
+        console.log(`Reservas encontradas con scan: ${result.Items ? result.Items.length : 0}`);
+        return {
+          items: result.Items || [],
+          lastKey: result.LastEvaluatedKey
+        };
+      }
     } catch (error) {
-      console.error('Error al consultar reservas del usuario:', error);
-      throw Boom.badImplementation('Error al consultar las reservas del usuario');
+      console.error('Error al obtener reservas por usuario:', error);
+      throw new Error(`Error al obtener reservas: ${error.message}`);
     }
   }
 
-  async obtenerReservasPorCancha(canchaId) {
+  async obtenerReservasPorCancha(canchaId, options = {}) {
     const params = {
       TableName: this.tableName,
-      IndexName: 'CanchaIdIndex', // Asumiendo que existe un índice secundario para canchaId
+      IndexName: 'CanchaIdIndex', // Usando el índice secundario global que ya está definido
       KeyConditionExpression: 'canchaId = :canchaId',
       ExpressionAttributeValues: {
         ':canchaId': canchaId
       }
     };
 
-    try {
-      const resultado = await this.dynamoDb.query(params).promise();
-      return resultado.Items.map(item => new Reserva(item));
-    } catch (error) {
-      console.error('Error al consultar reservas de la cancha:', error);
-      throw Boom.badImplementation('Error al consultar las reservas de la cancha');
-    }
-  }
-
-  async actualizarReserva(reservaId, datosActualizados) {
-    // Validar cupón si se aplica
-    if (datosActualizados.codigoPromoAplicado) {
-      const cuponRepo = new CuponDescuentoRepository();
-      const cupon = await cuponRepo.findByCodigo(datosActualizados.codigoPromoAplicado);
-      if (!cupon) {
-        throw Boom.notFound('El cupón no existe.');
-      }
-      const hoy = new Date();
-      const inicio = new Date(cupon.fechaInicio);
-      const fin = new Date(cupon.fechaFin);
-      if (hoy < inicio || hoy > fin) {
-        throw Boom.badRequest('El cupón no está vigente.');
-      }
+    if (options.limit) {
+      params.Limit = options.limit;
     }
 
-    // Si se cambian los horarioIds, validar y actualizar horarios
-    const horariosRepository = new HorariosRepository();
-    let horariosAntiguos = [];
-    if (datosActualizados.horarioIds && Array.isArray(datosActualizados.horarioIds)) {
-      // 1. Obtener la reserva actual para saber los horarios antiguos
-      const reservaActual = await this.obtenerReservaPorId(reservaId);
-      horariosAntiguos = Array.isArray(reservaActual.horarioIds) ? reservaActual.horarioIds : [];
-      // 2. Validar que los nuevos horarios estén libres
-      for (const horarioId of datosActualizados.horarioIds) {
-        const horario = await horariosRepository.getById(horarioId);
-        if (!horario) {
-          throw Boom.notFound(`El horario ${horarioId} no existe.`);
-        }
-        // Considera ocupado si tiene reservaId asignado o estado Reservado/Pagado/Ocupado, y no es de esta misma reserva
-        if ((horario.reservaId && horario.reservaId !== reservaId) || ['Reservado', 'Pagado', 'Ocupado'].includes(horario.estado)) {
-          throw Boom.conflict(`El horario ${horarioId} ya está reservado u ocupado.`);
-        }
-      }
-      // 3. Liberar horarios antiguos que ya no estén en la reserva
-      const aLiberar = horariosAntiguos.filter(h => !datosActualizados.horarioIds.includes(h));
-      for (const horarioId of aLiberar) {
-        await horariosRepository.update(horarioId, { 
-          reservaId: null, 
-          estado: 'Disponible',
-          _fromReservaService: true // Indicador especial para permitir actualizar reservaId
-        });
-      }
-      // 4. Asociar los nuevos horarios a la reserva
-      const aReservar = datosActualizados.horarioIds.filter(h => !horariosAntiguos.includes(h));
-      for (const horarioId of aReservar) {
-        await horariosRepository.update(horarioId, { 
-          reservaId, 
-          estado: 'Reservado',
-          _fromReservaService: true // Indicador especial para permitir actualizar reservaId
-        });
-      }
-    }
-
-    // Si se cambian los horarioIds, validar que los nuevos no estén ocupados
-    if (datosActualizados.horarioIds && Array.isArray(datosActualizados.horarioIds)) {
-      for (const horarioId of datosActualizados.horarioIds) {
-        const horario = await horariosRepository.getById(horarioId);
-        if (!horario) {
-          throw Boom.notFound(`El horario ${horarioId} no existe.`);
-        }
-        // Considera ocupado si tiene reservaId asignado o estado Reservado/Pagado/Ocupado
-        if (horario.reservaId || ['Reservado', 'Pagado', 'Ocupado'].includes(horario.estado)) {
-          throw Boom.conflict(`El horario ${horarioId} ya está reservado u ocupado.`);
-        }
-      }
+    if (options.lastKey) {
+      params.ExclusiveStartKey = options.lastKey;
     }
 
     try {
-      // Primero obtenemos la reserva actual
-      const reservaActual = await this.obtenerReservaPorId(reservaId);
-      
-      // Preparamos los datos actualizados manteniendo los campos no modificados
-      const reservaData = {
-        ...reservaActual,
-        ...datosActualizados,
-        reservaId, // Aseguramos mantener el ID original
-        updatedAt: new Date().toISOString()
+      console.log(`Buscando reservas para la cancha: ${canchaId} usando índice CanchaIdIndex`);
+      const result = await this.dynamoDb.query(params).promise();
+      console.log(`Reservas encontradas: ${result.Items ? result.Items.length : 0}`);
+      return {
+        items: result.Items || [],
+        lastKey: result.LastEvaluatedKey
       };
-      
-      // Validamos con la entidad
-      const reservaActualizada = new Reserva(reservaData);
-      
-      // Actualizar en DynamoDB
-      await this.dynamoDb.put({
-        TableName: this.tableName,
-        Item: reservaActualizada
-      }).promise();
-      
-      return reservaActualizada;
     } catch (error) {
-      if (error.isBoom) throw error;
-      console.error('Error al actualizar reserva:', error);
-      throw Boom.badImplementation('Error al actualizar la reserva');
+      console.error('Error al obtener reservas por cancha:', error);
+      throw new Error(`Error al obtener reservas por cancha: ${error.message}`);
     }
   }
+
+  // El método obtenerReservasPorCancha ya está implementado arriba usando scan con FilterExpression
+
+
 
   async eliminarReserva(reservaId) {
     try {
-      // Verificar que la reserva existe
-      await this.obtenerReservaPorId(reservaId);
+      // Verificar que la reserva existe y obtener sus datos
+      const reserva = await this.obtenerReservaPorId(reservaId);
+      
+      // Liberar los horarios asociados a la reserva
+      if (reserva.horarioIds && Array.isArray(reserva.horarioIds) && reserva.horarioIds.length > 0) {
+        const horariosRepository = require('../repositories/horariosRepository');
+        console.log(`Liberando ${reserva.horarioIds.length} horarios asociados a la reserva ${reservaId}`);
+        
+        for (const horarioId of reserva.horarioIds) {
+          try {
+            // Actualizar el estado del horario a 'Disponible' y quitar la referencia a la reserva
+            await horariosRepository.update(horarioId, {
+              estado: 'Disponible',
+              reservaId: null,
+              updatedAt: new Date().toISOString(),
+              _fromReservaService: true // Indicador especial para permitir actualizar reservaId
+            });
+            console.log(`Horario ${horarioId} liberado y marcado como 'Disponible'`);
+          } catch (horarioError) {
+            console.error(`Error al liberar el horario ${horarioId}:`, horarioError);
+            // Continuamos con los demás horarios aunque falle uno
+          }
+        }
+      }
       
       // Eliminar la reserva
       await this.dynamoDb.delete({
@@ -238,7 +276,7 @@ class ReservaRepository {
         Key: { reservaId }
       }).promise();
       
-      return { eliminado: true, reservaId };
+      return { eliminado: true, reservaId, mensaje: 'Reserva eliminada y horarios liberados correctamente' };
     } catch (error) {
       if (error.isBoom) throw error;
       console.error('Error al eliminar reserva:', error);

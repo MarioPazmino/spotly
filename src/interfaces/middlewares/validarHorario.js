@@ -18,8 +18,8 @@ async function validarHorario(req, res, next) {
     const userGroups = req.user.groups || req.user['cognito:groups'] || [];
     const isUpdate = req.method === 'PATCH' || req.originalUrl.includes('/update') || !!req.params.id || !!req.params.horarioId;
     
-    // Crear instancia del repositorio de canchas (este sí necesita new)
-    const canchasRepository = new CanchasRepository();
+    // Usar la instancia ya creada del repositorio (patrón Singleton)
+    // No necesitamos crear una nueva instancia porque CanchasRepository ya es un singleton
     // No instanciar centroDeportivoRepository porque ya es una instancia
     
     // Validar que se proporcionaron campos obligatorios - solo para creación (POST)

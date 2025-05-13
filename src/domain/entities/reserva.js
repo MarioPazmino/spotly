@@ -15,8 +15,12 @@ class Reserva {
     updatedAt // Fecha de última actualización
   }) {
     // Validación de campos obligatorios
-    if (!reservaId || !userId || !canchaId) {
-      throw new Error('Campos obligatorios faltantes: reservaId, userId, canchaId');
+    const camposFaltantes = [];
+    if (!userId) camposFaltantes.push('userId');
+    if (!canchaId) camposFaltantes.push('canchaId');
+    
+    if (camposFaltantes.length > 0) {
+      throw new Error(`Campos obligatorios faltantes: ${camposFaltantes.join(', ')}`);
     }
 
     // Validación específica para horarioIds
@@ -27,7 +31,7 @@ class Reserva {
       throw new Error('No puedes reservar más de 12 horarios en una sola reserva');
     }
 
-    this.reservaId = reservaId;
+    this.reservaId = reservaId || `tmp-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
     this.userId = userId;
     this.canchaId = canchaId;
     this.horarioIds = horarioIds; // Ya validado que es un array no vacío

@@ -29,8 +29,11 @@ module.exports = {
     if (horarioData.horaInicio) horarioData.horaInicio = normalizarHoraRepo(horarioData.horaInicio);
     if (horarioData.horaFin) horarioData.horaFin = normalizarHoraRepo(horarioData.horaFin);
     
-    // Por defecto, un horario nuevo siempre está disponible
-    horarioData.estado = 'Disponible';
+    // Por defecto, un horario nuevo siempre está disponible, pero respetamos el estado si ya viene definido
+    // Esto es importante para las actualizaciones donde queremos cambiar el estado a 'Reservado'
+    if (!horarioData.estado) {
+      horarioData.estado = 'Disponible';
+    }
     
     // Creamos una copia limpia de los datos para el horario
     const horarioDataLimpio = {
@@ -40,6 +43,8 @@ module.exports = {
       horaInicio: horarioData.horaInicio,
       horaFin: horarioData.horaFin,
       estado: horarioData.estado,
+      // Incluir reservaId si existe (importante para las reservas)
+      ...(horarioData.reservaId ? { reservaId: horarioData.reservaId } : {}),
       createdAt: horarioData.createdAt || new Date().toISOString(),
       updatedAt: horarioData.updatedAt || new Date().toISOString()
     };
@@ -129,7 +134,7 @@ module.exports = {
 
     // Permite actualizar solo los campos válidos
     // No permitimos actualizar canchaId para evitar que un horario se mueva a otra cancha
-    const allowed = ['fecha', 'horaInicio', 'horaFin', 'estado'];
+    const allowed = ['fecha', 'horaInicio', 'horaFin', 'estado', 'reservaId'];
     
     // Crear un objeto con solo los campos permitidos
     const datosActualizados = {};
@@ -153,13 +158,21 @@ module.exports = {
     console.log('Datos a actualizar:', JSON.stringify(datosActualizados));
     console.log('Updates recibidos:', JSON.stringify(updates));
     
-    // Ya no validamos si solo hay updatedAt, permitimos cualquier actualización
+    // Verificar si se está actualizando el estado y el reservaId
+    if (updates.estado === 'Reservado' && updates.reservaId) {
+      console.log(`Actualizando horario ${horarioId} a estado Reservado con reservaId ${updates.reservaId}`);
+      // Asegurar que estos campos estén incluidos en datosActualizados
+      datosActualizados.estado = 'Reservado';
+      datosActualizados.reservaId = updates.reservaId;
+    }
     
     // Combinar los datos actuales con los actualizados
     const horarioActualizado = {
       ...horarioActual,
       ...datosActualizados
     };
+    
+    console.log('Horario actualizado completo:', JSON.stringify(horarioActualizado));
     
     // Usar el método create del mismo módulo para actualizar el horario
     // Esto sobrescribe el horario completo con los nuevos datos

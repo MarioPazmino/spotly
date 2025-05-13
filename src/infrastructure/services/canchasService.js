@@ -10,7 +10,8 @@ const AWS = require('aws-sdk');
 
 class CanchasService {
   constructor() {
-    this.repo = new CanchasRepository();
+    // Usar la instancia ya creada del repositorio (patrón Singleton)
+    this.repo = CanchasRepository;
     this.imagenService = new CanchaImagenService(this.repo);
   }
 

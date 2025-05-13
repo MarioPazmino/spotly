@@ -40,27 +40,119 @@ class CuponDescuentoControllerBackup {
       
       // Manejar errores específicos con respuestas JSON informativas
       if (err.message && err.message.includes('centroId asociado no existe')) {
-        return res.status(404).json({
-          error: 'Centro deportivo no encontrado',
-          mensaje: 'El ID del centro deportivo proporcionado no existe en el sistema',
-          detalles: {
-            centroId: req.body.centroId || req.body.centroDeportivoId,
-            codigo: req.body.codigo
-          },
-          code: 'CENTRO_NOT_FOUND'
-        });
+        // Obtener los centros deportivos del usuario para mostrarlos como sugerencia
+        try {
+          const centroDeportivoRepository = require('../../../../infrastructure/repositories/centroDeportivoRepository');
+          const userId = req.user && req.user.userId;
+          const esSuperAdmin = req.user && req.user.groups && req.user.groups.includes('super_admin');
+          
+          // Si es super_admin o no hay userId, obtener todos los centros
+          let centrosUsuario = [];
+          
+          if (esSuperAdmin) {
+            // Para super_admin, obtener todos los centros deportivos
+            try {
+              const resultado = await centroDeportivoRepository.findAll({}, { limit: 10 });
+              centrosUsuario = resultado.items || [];
+            } catch (error) {
+              console.error('Error al obtener todos los centros:', error);
+              centrosUsuario = [];
+            }
+          } else if (userId) {
+            // Para usuarios normales, obtener solo sus centros
+            try {
+              centrosUsuario = await centroDeportivoRepository.findByAdminId(userId);
+            } catch (error) {
+              console.error('Error al obtener centros del usuario:', error);
+              centrosUsuario = [];
+            }
+          }
+          
+          return res.status(404).json({
+            error: 'Centro deportivo no encontrado',
+            mensaje: 'El ID del centro deportivo proporcionado no existe en el sistema',
+            detalles: {
+              centroId: req.body.centroId || req.body.centroDeportivoId,
+              codigo: req.body.codigo,
+              centrosDisponibles: centrosUsuario.map(centro => ({
+                centroId: centro.centroId,
+                nombre: centro.nombre
+              }))
+            },
+            sugerencia: esSuperAdmin ? 'Utiliza uno de los centros deportivos disponibles' : 'Utiliza uno de tus centros deportivos disponibles',
+            code: 'CENTRO_NOT_FOUND'
+          });
+        } catch (centroError) {
+          console.error('Error al obtener centros del usuario:', centroError);
+          // Si falla la obtención de centros, devolver el error original
+          return res.status(404).json({
+            error: 'Centro deportivo no encontrado',
+            mensaje: 'El ID del centro deportivo proporcionado no existe en el sistema',
+            detalles: {
+              centroId: req.body.centroId || req.body.centroDeportivoId,
+              codigo: req.body.codigo
+            },
+            code: 'CENTRO_NOT_FOUND'
+          });
+        }
       }
       
       if (err.message && err.message.includes('Solo el administrador del centro puede crear cupones')) {
-        return res.status(403).json({
-          error: 'Permiso denegado',
-          mensaje: 'Solo el administrador del centro deportivo puede crear cupones para su centro',
-          detalles: {
-            centroId: req.body.centroId || req.body.centroDeportivoId,
-            userId: req.user && req.user.userId
-          },
-          code: 'PERMISSION_DENIED'
-        });
+        // Obtener los centros deportivos del usuario para mostrarlos como sugerencia
+        try {
+          const centroDeportivoRepository = require('../../../../infrastructure/repositories/centroDeportivoRepository');
+          const userId = req.user && req.user.userId;
+          const esSuperAdmin = req.user && req.user.groups && req.user.groups.includes('super_admin');
+          
+          // Si es super_admin o no hay userId, obtener todos los centros
+          let centrosUsuario = [];
+          
+          if (esSuperAdmin) {
+            // Para super_admin, obtener todos los centros deportivos
+            try {
+              const resultado = await centroDeportivoRepository.findAll({}, { limit: 10 });
+              centrosUsuario = resultado.items || [];
+            } catch (error) {
+              console.error('Error al obtener todos los centros:', error);
+              centrosUsuario = [];
+            }
+          } else if (userId) {
+            // Para usuarios normales, obtener solo sus centros
+            try {
+              centrosUsuario = await centroDeportivoRepository.findByAdminId(userId);
+            } catch (error) {
+              console.error('Error al obtener centros del usuario:', error);
+              centrosUsuario = [];
+            }
+          }
+          
+          return res.status(403).json({
+            error: 'Permiso denegado',
+            mensaje: 'Solo el administrador del centro deportivo puede crear cupones para su centro',
+            detalles: {
+              centroId: req.body.centroId || req.body.centroDeportivoId,
+              userId: userId,
+              centrosDisponibles: centrosUsuario.map(centro => ({
+                centroId: centro.centroId,
+                nombre: centro.nombre
+              }))
+            },
+            sugerencia: esSuperAdmin ? 'Utiliza uno de los centros deportivos disponibles' : 'Utiliza uno de tus centros deportivos disponibles',
+            code: 'PERMISSION_DENIED'
+          });
+        } catch (centroError) {
+          console.error('Error al obtener centros del usuario:', centroError);
+          // Si falla la obtención de centros, devolver el error original
+          return res.status(403).json({
+            error: 'Permiso denegado',
+            mensaje: 'Solo el administrador del centro deportivo puede crear cupones para su centro',
+            detalles: {
+              centroId: req.body.centroId || req.body.centroDeportivoId,
+              userId: userId
+            },
+            code: 'PERMISSION_DENIED'
+          });
+        }
       }
       
       if (err.message && err.message.includes('Ya existe un cupón con ese código')) {

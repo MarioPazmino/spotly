@@ -128,4 +128,4 @@ class CanchasRepository {
   }
 }
 
-module.exports = CanchasRepository;
+module.exports = new CanchasRepository();

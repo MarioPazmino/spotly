@@ -27,7 +27,7 @@ const app = express();
 // Importar repositorios
 const UserRepository = require('./src/infrastructure/repositories/userRepository');
 const centroDeportivoRepository = require('./src/infrastructure/repositories/centroDeportivoRepository');
-const CanchasRepository = require('./src/infrastructure/repositories/canchasRepository');
+const canchasRepository = require('./src/infrastructure/repositories/canchasRepository');
 const horariosRepository = require('./src/infrastructure/repositories/horariosRepository');
 const CuponDescuentoRepository = require('./src/infrastructure/repositories/cuponDescuentoRepository');
 const reservaRepository = require('./src/infrastructure/repositories/reservaRepository');
@@ -36,7 +36,7 @@ const ResenaRepository = require('./src/infrastructure/repositories/resenaReposi
 
 // Instanciar los repositorios que son clases
 const userRepository = new UserRepository();
-const canchasRepository = new CanchasRepository();
+// canchasRepository ya es una instancia, no necesitamos usar 'new'
 // cuponDescuentoRepository ya es una instancia, no necesitamos usar 'new'
 const cuponDescuentoRepository = require('./src/infrastructure/repositories/cuponDescuentoRepository');
 const pagosRepository = new PagosRepository();

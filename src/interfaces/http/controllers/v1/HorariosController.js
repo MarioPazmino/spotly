@@ -452,8 +452,7 @@ class HorariosController {
         // Intentar proporcionar información útil al usuario
         
         const userId = req.user.sub || req.user.userId;
-        const CanchasRepository = require('../../../../infrastructure/repositories/canchasRepository');
-        const canchasRepository = new CanchasRepository();
+        const canchasRepository = require('../../../../infrastructure/repositories/canchasRepository');
         const centroDeportivoRepository = require('../../../../infrastructure/repositories/centroDeportivoRepository');
         
         try {

@@ -1,4 +1,4 @@
-const CanchasRepository = require('../../../infrastructure/repositories/canchasRepository');
+const canchasRepository = require('../../../infrastructure/repositories/canchasRepository');
 const centroDeportivoRepository = require('../../../infrastructure/repositories/centroDeportivoRepository');
 
 /**
@@ -15,7 +15,8 @@ function verificarPropiedadCancha(req, res, next) {
     if (userGroups.includes('super_admin') || userGroups.includes('admin_centro')) {
       // Para estos roles, verificamos solo que la cancha exista si se proporciona un ID
       if (canchaId) {
-        const canchasRepository = new CanchasRepository();
+        // Usar la instancia ya creada del repositorio (patrón Singleton)
+        // Ya tenemos la instancia importada al inicio del archivo
         
         canchasRepository.findById(canchaId)
           .then(cancha => {
@@ -41,7 +42,8 @@ function verificarPropiedadCancha(req, res, next) {
       }
       
       // Si no se proporciona canchaId, debemos buscar las canchas asociadas al usuario
-      const canchasRepository = new CanchasRepository();
+      // Usar la instancia ya creada del repositorio (patrón Singleton)
+      const canchasRepository = CanchasRepository;
       
       // Para los administradores, primero buscamos sus centros deportivos
       centroDeportivoRepository.findByAdminId(userId)
@@ -105,7 +107,7 @@ function verificarPropiedadCancha(req, res, next) {
     }
 
     // Para usuarios normales, primero obtenemos todas sus canchas
-    const canchasRepository = new CanchasRepository();
+    // Usar la instancia ya creada del repositorio (patrón Singleton)
     
     centroDeportivoRepository.findByAdminId(userId)
       .then(async centros => {
