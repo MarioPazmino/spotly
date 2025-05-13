@@ -144,20 +144,22 @@ class Pago {
   }
 
   // Método privado para validar detalles específicos de pago en efectivo
-  _validarDetallesEfectivo(detallesPago) {
+  _validarDetallesEfectivo(detallesPago = {}) {
     // Generar código único de 6 dígitos si no existe
-    const codigoPago = detallesPago?.codigoPago || this._generarCodigoPago();
+    const codigoPago = detallesPago.codigoPago || this._generarCodigoPago();
     
     // Validar formato del código si se proporciona
-    if (detallesPago?.codigoPago && !/^[0-9]{6}$/.test(detallesPago.codigoPago)) {
+    if (detallesPago.codigoPago && !/^[0-9]{6}$/.test(detallesPago.codigoPago)) {
       throw new Error('Formato de código de pago inválido. Debe ser un número de 6 dígitos');
     }
     
+    // Conservar todos los campos originales y agregar/sobrescribir solo los campos requeridos
     return {
+      ...detallesPago,
       codigoPago,
-      validadoPor: null,
-      validadoEn: null,
-      motivoRechazo: null
+      validadoPor: detallesPago.validadoPor || null,
+      validadoEn: detallesPago.validadoEn || null,
+      motivoRechazo: detallesPago.motivoRechazo || null
     };
   }
 

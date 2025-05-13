@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const pagosRepository = require('../../../../infrastructure/repositories/pagosRepository');
 const reservaRepository = require('../../../../infrastructure/repositories/reservaRepository');
 const centroDeportivoRepository = require('../../../../infrastructure/repositories/centroDeportivoRepository');
+const canchasRepository = require('../../../../infrastructure/repositories/canchasRepository');
 
 // Intentar importar el servicio de Braintree, o usar una implementación de respaldo si falla
 let braintreeService;
@@ -45,22 +46,73 @@ try {
 // Implementación directa del servicio de pagos
 class PagosService {
   constructor() {
-    this.pagosRepo = pagosRepository;
+    // Crear instancia del repositorio si es una clase, o usar directamente si ya es una instancia
+    this.pagosRepo = typeof pagosRepository === 'function' ? new pagosRepository() : pagosRepository;
     this.reservaRepo = reservaRepository;
     this.centroRepo = centroDeportivoRepository;
+    this.canchaRepo = canchasRepository;
   }
 
   async create(pagoData, userId) {
-    // Implementación del método create
+    // Verificar que se proporciona un reservaId
+    if (!pagoData.reservaId) {
+      throw Boom.badRequest('Se requiere el ID de la reserva para crear un pago');
+    }
+
+    // Obtener la reserva asociada
+    const reserva = await this.reservaRepo.obtenerReservaPorId(pagoData.reservaId);
+    if (!reserva) {
+      throw Boom.notFound(`Reserva con ID ${pagoData.reservaId} no encontrada`);
+    }
+
+    // Verificar que la reserva pertenece al usuario que realiza el pago
+    if (reserva.userId !== userId) {
+      throw Boom.forbidden('No tienes permiso para realizar un pago para esta reserva');
+    }
+
+    // Obtener el centro deportivo para incluir su ID en el pago
+    const cancha = await this.canchaRepo.findById(reserva.canchaId);
+    if (!cancha) {
+      throw Boom.notFound(`Cancha con ID ${reserva.canchaId} no encontrada`);
+    }
+
+    // Calcular montos
+    const precioOriginal = parseFloat((reserva.total || 0).toFixed(2));
+    const descuentoAplicado = parseFloat((reserva.descuentoAplicado || 0).toFixed(2));
+    const montoTotal = parseFloat((precioOriginal - descuentoAplicado).toFixed(2)); // Monto total es el precio final después del descuento
+
+    console.log(`Creando pago para reserva ${pagoData.reservaId}:`);
+    console.log(`- Precio original: ${precioOriginal}`);
+    console.log(`- Descuento aplicado: ${descuentoAplicado}`);
+    console.log(`- Monto total a pagar: ${montoTotal}`);
+
+    // Crear objeto de pago
     const pago = {
-      id: uuidv4(),
+      pagoId: uuidv4(),
       userId,
-      ...pagoData,
+      reservaId: pagoData.reservaId,
+      centroId: cancha.centroId,
+      monto: montoTotal, // Para pagos no parciales, monto = montoTotal
+      montoTotal, // Monto total después de aplicar descuentos
+      precioOriginal, // Guardamos el precio original para referencia
+      descuentoAplicado, // Guardamos el descuento aplicado
+      metodoPago: pagoData.metodoPago,
+      detallesPago: pagoData.detallesPago,
+      estado: 'Pendiente', // Estado inicial
+      intentos: 1, // Primer intento
+      esPagoParcial: false, // Por defecto no es parcial
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
     
-    return this.pagosRepo.create(pago);
+    // Verificar si el método del repositorio es crearPago o create
+    if (typeof this.pagosRepo.crearPago === 'function') {
+      return this.pagosRepo.crearPago(pago);
+    } else if (typeof this.pagosRepo.create === 'function') {
+      return this.pagosRepo.create(pago);
+    } else {
+      throw new Error('No se encontró un método válido para crear pagos en el repositorio');
+    }
   }
 
   async findById(pagoId) {
@@ -75,19 +127,33 @@ class PagosService {
   }
 
   async delete(pagoId) {
-    return this.pagosRepo.delete(pagoId);
+    return this.pagosRepo.eliminarPago(pagoId);
   }
 
   async findAll(limit = 20, exclusiveStartKey = null) {
-    return this.pagosRepo.findAll(limit, exclusiveStartKey);
+    const options = { limit };
+    if (exclusiveStartKey) {
+      options.lastEvaluatedKey = exclusiveStartKey;
+    }
+    return this.pagosRepo.findAll({}, options);
   }
 
   async findByCentro(centroId, limit = 20, exclusiveStartKey = null) {
-    return this.pagosRepo.findByCentro(centroId, limit, exclusiveStartKey);
+    const filters = { centroId };
+    const options = { limit };
+    if (exclusiveStartKey) {
+      options.lastEvaluatedKey = exclusiveStartKey;
+    }
+    return this.pagosRepo.findAll(filters, options);
   }
 
   async findByUser(userId, limit = 20, exclusiveStartKey = null) {
-    return this.pagosRepo.findByUser(userId, limit, exclusiveStartKey);
+    const filters = { userId };
+    const options = { limit };
+    if (exclusiveStartKey) {
+      options.lastEvaluatedKey = exclusiveStartKey;
+    }
+    return this.pagosRepo.findAll(filters, options);
   }
 
   async findByReserva(reservaId) {
@@ -323,6 +389,15 @@ class PagosController {
     });
   }
 
+  async actualizarEstadoPago(req, res) {
+    const { pagoId } = req.params;
+    const pago = await pagosService.update(pagoId, { estado: req.body.estado });
+    res.json({
+      success: true,
+      data: pago
+    });
+  }
+
   async eliminarPago(req, res) {
     await pagosService.delete(req.params.pagoId);
     res.json({
@@ -368,6 +443,65 @@ class PagosController {
     res.json({
       success: true,
       data: pagos
+    });
+  }
+  
+  async listarPagosPorReserva(req, res) {
+    const { reservaId } = req.params;
+    const pagos = await pagosService.findByReserva(reservaId);
+    res.json({
+      success: true,
+      data: pagos
+    });
+  }
+  
+  async reembolsarPago(req, res) {
+    const { pagoId } = req.params;
+    // Obtener el ID de transacción del pago
+    const pago = await pagosService.findById(pagoId);
+    if (!pago || !pago.detallesPago || !pago.detallesPago.transactionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'No se encontró un ID de transacción para este pago'
+      });
+    }
+    
+    const resultado = await pagosService.reembolsarTransaccion(pago.detallesPago.transactionId);
+    res.json({
+      success: true,
+      data: resultado
+    });
+  }
+  
+  async getMetodosPagoDisponibles(req, res) {
+    const { centroId } = req.params;
+    const metodosDisponibles = await pagosService.getMetodosPagoDisponibles(centroId);
+    res.json({
+      success: true,
+      data: { metodosPago: metodosDisponibles }
+    });
+  }
+  
+  async generarTokenTarjeta(req, res) {
+    const centroId = req.body.centroId || req.params.centroId;
+    if (!centroId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Se requiere el ID del centro deportivo'
+      });
+    }
+    const token = await pagosService.generarTokenBraintree(centroId);
+    res.json({
+      success: true,
+      data: { clientToken: token.clientToken }
+    });
+  }
+  
+  async procesarPagoTarjeta(req, res) {
+    const pago = await pagosService.create(req.body, req.user.sub);
+    res.status(201).json({
+      success: true,
+      data: pago
     });
   }
 }
