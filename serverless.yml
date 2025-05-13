@@ -187,11 +187,11 @@ functions:
       COGNITO_USER_POOL_ID: !Ref CognitoUserPool
       COGNITO_WEB_CLIENT_ID: !Ref CognitoUserPoolWebClient
       COGNITO_MOBILE_CLIENT_ID: !Ref CognitoUserPoolMobileClient
-  customMessage:
+  cognitoCustomMessage:
     handler: src/cognito/customMessage.handler
     events:
       - cognitoUserPool:
-          pool: alquiler-canchas-users-dev
+          pool: alquiler-canchas-users-${self:custom.stage}
           trigger: CustomMessage
           existing: true
     role: !GetAtt IamRoleCustomResources.Arn
